@@ -1457,19 +1457,17 @@ function loop(now) {
       onCardChosen(pick(G.currentCards));
     }
   }
-  if (G.state==='battle') {
+  if (G.state==='battle' && !G.net.isGuest) {
     stepPhysics(dt);
-    if (!G.net.isGuest) {
-      const alive = G.balls.filter(b=>b.alive);
-      let roundOver = false;
-      if (G.teamMode) {
-        const teamsLeft = new Set(alive.map(b=>b.team));
-        roundOver = teamsLeft.size <= 1;
-      } else {
-        roundOver = alive.length <= 1;
-      }
-      if (roundOver) endRound();
+    const alive = G.balls.filter(b=>b.alive);
+    let roundOver = false;
+    if (G.teamMode) {
+      const teamsLeft = new Set(alive.map(b=>b.team));
+      roundOver = teamsLeft.size <= 1;
+    } else {
+      roundOver = alive.length <= 1;
     }
+    if (roundOver) endRound();
   }
   G.floatTexts = G.floatTexts.filter(f=>{ f.life -= dt*1.2; return f.life>0; });
   render(); updateHUD();
@@ -1655,20 +1653,15 @@ function applyRemoteState(data) {
   }
   data.balls.forEach((bd, i) => {
     if (G.balls[i]) {
-      // 第一次同步或非自己：用房主位置；之後自己的球本地預測
-      if (!G.firstStateApplied || i !== G.myIndex) {
-        G.balls[i].x = bd.x; G.balls[i].y = bd.y;
-      }
+      G.balls[i].x = bd.x; G.balls[i].y = bd.y;
       G.balls[i].hp = bd.hp; G.balls[i].maxHp = bd.maxHp;
       G.balls[i].alive = bd.alive;
       G.balls[i].name = bd.name;
       G.balls[i].color = bd.color;
       G.balls[i].atk = bd.atk || 1;
       G.balls[i].speed = bd.spd || 2;
-      if (!G.balls[i]._recalcOnce) { G.balls[i].recalcStats(); G.balls[i]._recalcOnce = true; }
     }
   });
-  G.firstStateApplied = true;
   if (G.circle) { G.circle.r = data.circleR; G.circle.timer = data.circleTimer; }
   G.state = data.state;
   G.round = data.round;
