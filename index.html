@@ -1287,9 +1287,9 @@ function updateHUD() {
   if (p) {
     document.getElementById('pp-hp').style.width = Math.max(0,p.hp/p.maxHp*100)+'%';
     document.getElementById('pp-hp-text').textContent = Math.max(0,Math.round(p.hp))+' / '+p.maxHp;
-    document.getElementById('pp-atk').textContent = p.atk;
-    document.getElementById('pp-spd').textContent = p.speed.toFixed(1);
-    document.getElementById('pp-dash').textContent = G.dashCd > 0 ? G.dashCd.toFixed(1) : '就緒';
+    document.getElementById('pp-atk').textContent = p.atk||1;
+    document.getElementById('pp-spd').textContent = (p.speed||2).toFixed(1);
+    document.getElementById('pp-dash').textContent = (G.dashCd||0) > 0 ? G.dashCd.toFixed(1) : '就緒';
     const sk = document.getElementById('pp-skills');
     sk.innerHTML = '';
     p.ownedSkills.forEach(sid=>{
