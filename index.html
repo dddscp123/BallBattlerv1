@@ -87,7 +87,7 @@
   #draw-cards { display: flex; gap: 20px; }
 
   .card { transition: transform 0.12s; cursor:pointer; }
-  .card:hover { transform: scale(1.06); }
+  .card:hover { transform: scale(1.1) !important; }
   .card:active { transform: scale(0.98); }
   @keyframes dealIn {
     from { transform: translateY(400px) scale(0.5); opacity: 0; }
@@ -1768,7 +1768,11 @@ function startMapVote() {
         const idx = G.balls.findIndex(b => b.remoteId === pid);
         indexMap[G.net.remoteBalls[pid].name] = idx;
       });
-      G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap }));
+      const ballStates = G.balls.map(b => ({
+        name: b.name, color: b.color, x: b.x, y: b.y,
+        hp: b.hp, maxHp: b.maxHp, atk: b.atk, speed: b.speed
+      }));
+      G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap, ballStates, mapId: G.mapTheme.id }));
     }
     startDrawPhase();
   }, 10000);
