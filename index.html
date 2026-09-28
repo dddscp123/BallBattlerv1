@@ -952,9 +952,12 @@ function onGuestCardPickedRemote(fromGuest, cardId) {
   checkAllCardsPicked();
 }
 function checkAllCardsPicked() {
+  const guests = Object.entries(G.pendingPicks||{});
+  const waiting = guests.filter(([pid,p])=>!p.picked).map(([pid])=>pid);
+  console.log(`[選卡檢查] 房主已選:${G.hostPicked}，客人${guests.length}人，等待中:`, waiting.length?waiting:'無');
   if (!G.hostPicked) return;
-  const guests = Object.values(G.pendingPicks||{});
-  if (guests.length === 0 || guests.every(p=>p.picked)) {
+  if (guests.length === 0 || waiting.length === 0) {
+    console.log('[選卡檢查] 全員就緒，開打！');
     G.hostPicked = false;
     hideDrawCards();
     startBattlePhase();
