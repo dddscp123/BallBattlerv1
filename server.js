@@ -1,6 +1,4 @@
 // 球球大王 聯機中繼伺服器 (Node.js + ws)
-// 部署到 Render/Railway/Fly.io 免費層即可
-// 啟動: node server.js
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const port = process.env.PORT || 3000;
@@ -8,11 +6,15 @@ const port = process.env.PORT || 3000;
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
 
-// rooms: { [code]: { host: ws, guests: Map<ws, {name, peerId}> } }
 const rooms = {};
+const queue = []; // 快速配對佇列
 
 function send(ws, obj) {
   if (ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+function broadcastRoom(room, msg) {
+  send(room.host, msg);
+  room.guests.forEach((g, guestWs) => send(guestWs, msg));
 }
 
 wss.on('connection', (ws) => {
@@ -22,11 +24,8 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.t === 'createRoom') {
-      // 房主建立房間
       let code;
-      do {
-        code = Math.random().toString(36).slice(2, 6).toUpperCase();
-      } while (rooms[code]);
+      do { code = Math.random().toString(36).slice(2, 6).toUpperCase(); } while (rooms[code]);
       rooms[code] = { host: ws, guests: new Map() };
       ws.roomCode = code;
       send(ws, { t: 'roomCreated', code });
@@ -39,26 +38,43 @@ wss.on('connection', (ws) => {
       room.guests.set(ws, { name: msg.name || '玩家' });
       ws.roomCode = msg.code;
       send(ws, { t: 'joined', code: msg.code });
-      // 轉告房主有新客人
       send(room.host, { t: 'guestJoined', wsId: ws._wsId, name: msg.name });
-      console.log('客人加入', msg.code, msg.name);
+    }
+
+    else if (msg.t === 'quickMatch') {
+      // 快速配對：從佇列找一個等待中的人
+      if (queue.length > 0) {
+        const host = queue.shift();
+        if (host.readyState !== 1) return;
+        let code;
+        do { code = Math.random().toString(36).slice(2, 6).toUpperCase(); } while (rooms[code]);
+        rooms[code] = { host, guests: new Map() };
+        host.roomCode = code;
+        rooms[code].guests.set(ws, { name: msg.name || '玩家' });
+        ws.roomCode = code;
+        send(host, { t: 'roomCreated', code, autoMatched: true, opponentName: msg.name });
+        send(ws, { t: 'joined', code: code, autoMatched: true, hostName: host.playerName || '玩家' });
+        console.log('快速配對成功', code);
+      } else {
+        ws.queueName = msg.name || '玩家';
+        queue.push(ws);
+        send(ws, { t: 'queueWait' });
+        console.log('排隊中');
+      }
     }
 
     else if (msg.t === 'hostStart') {
       const room = rooms[ws.roomCode];
       if (!room || room.host !== ws) return;
-      // 廣播開始給所有客人
       room.guests.forEach((g, guestWs) => {
         send(guestWs, { t: 'start', myIndex: msg.indexMap[g.name] });
       });
     }
 
     else {
-      // 其他訊息：房主廣播給客人，客人發給房主
       const room = rooms[ws.roomCode];
       if (!room) return;
       if (room.host === ws) {
-        // 房主 -> 指定客人 or 全部客人
         if (msg.guestTarget) {
           const target = [...room.guests.keys()].find(g => g._wsId === msg.guestTarget);
           if (target) send(target, msg);
@@ -66,24 +82,22 @@ wss.on('connection', (ws) => {
           room.guests.forEach((g, guestWs) => send(guestWs, msg));
         }
       } else if (room.guests.has(ws)) {
-        // 客人 -> 房主
         send(room.host, Object.assign({}, msg, { fromGuest: ws._wsId }));
       }
     }
   });
 
   ws.on('close', () => {
+    const qi = queue.indexOf(ws);
+    if (qi >= 0) queue.splice(qi, 1);
     const room = rooms[ws.roomCode];
     if (!room) return;
     if (room.host === ws) {
-      // 房主離開，廣播給客人
       room.guests.forEach((g, guestWs) => send(guestWs, { t: 'hostLeft' }));
       delete rooms[ws.roomCode];
-      console.log('房主離開', ws.roomCode);
     } else {
       room.guests.delete(ws);
       send(room.host, { t: 'guestLeft', wsId: ws._wsId });
-      console.log('客人離開', ws.roomCode);
     }
   });
 });
