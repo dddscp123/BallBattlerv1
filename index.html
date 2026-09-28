@@ -228,7 +228,6 @@
       <div class="name-edit">點擊名字修改</div>
       <p>15 滴血開局，活到最後得 1 勝點，先到 3 勝點奪冠。每 45 秒縮圈。<br>操作：WASD 移動，Shift 衝刺撞人。</p>
       <div class="menu-btns">
-        <button class="btn primary" id="btn-solo">人機對局</button>
         <button class="btn" id="btn-create">創建房間</button>
         <button class="btn" id="btn-join">加入房間</button>
       </div>
@@ -470,7 +469,7 @@ class Ball {
     this.hasHelicopter=false;
     this.hasMonk=false; this.monkTriggered=false; this.armorTimer=0;
     this.hasRocket=false; this.rocketTimer=0;
-    this.hasGhost=false; this.ghostTimer=0;
+    this.hasGhost=false; this.ghostTimer=0; this.ghostCooldown=0;
     this.hasTank=false; this.tankTimer=0; this.tankCharge=0; this.tankTrail=[];
     this.victoryPoints=0;
   }
@@ -670,24 +669,15 @@ const G = {
 
 function initGame(teamMode, keepMap) {
   nextId = 1;
-  G.teamMode = !!teamMode;
-  if (!keepMap) G.mapTheme = MAP_THEMES[Math.floor(Math.random()*MAP_THEMES.length)];
+  G.teamMode = false;
+  if (!keepMap) G.mapTheme = MAP_THEMES[0];
   document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
-  const teamColor = ['#22d3ee','#ef4444'];
-  if (G.teamMode) {
-    G.balls = [
-      Object.assign(new Ball({ name: store.playerName, color:'#22d3ee', isPlayer:true }), {team:0}),
-      Object.assign(new Ball({ name:'隊友', color:'#06b6d4' }), {team:0}),
-      Object.assign(new Ball({ name:'敵A', color:'#ef4444' }), {team:1}),
-      Object.assign(new Ball({ name:'敵B', color:'#f97316' }), {team:1}),
-    ];
-  } else {
-    G.balls = [
-      new Ball({ name: store.playerName, color:'#22d3ee', isPlayer:true }),
-      new Ball({ name:'赤', color:'#ef4444' }),
-      new Ball({ name:'翠', color:'#22c55e' }),
-      new Ball({ name:'紫', color:'#a855f7' }),
-    ];
+  const colors = ['#22d3ee','#ef4444','#22c55e','#a855f7','#fbbf24','#f472b6'];
+  // 只建玩家球：房主端 = 1 + remote 人數；客人端由 ballStates 覆蓋
+  const numPlayers = G.net.isHost ? 1 + Object.keys(G.net.remoteBalls).length : (G.balls ? G.balls.length : 2);
+  G.balls = [];
+  for (let i = 0; i < numPlayers; i++) {
+    G.balls.push(new Ball({ name: '玩家'+i, color: colors[i%colors.length], isPlayer: i===0 && !G.net.isGuest }));
   }
   G.round = 1;
   G.floatTexts = []; G.smokeParticles = [];
@@ -698,6 +688,8 @@ function initGame(teamMode, keepMap) {
 // ---------- 抽卡 ----------
 function startDrawPhase() {
   G.state = 'draw';
+  G.cardLocked = false;
+  document.getElementById('sub-overlay').classList.add('hidden');
   G.cardLocked = false;
   G.drawTimer = DRAW_TIME;
   document.getElementById('phase-tag').textContent = '選卡中';
@@ -750,8 +742,8 @@ function showDrawCards(cards) {
     el.onclick = () => {
       if (G.cardLocked) return;
       G.cardLocked = true;
+      document.querySelectorAll('#draw-cards .card').forEach(c => { if (c !== el) c.remove(); });
       el.style.transform = 'scale(1.15)';
-      document.querySelectorAll('#draw-cards .card').forEach(c => { if (c !== el) c.classList.add('disabled'); });
       setTimeout(() => onCardChosen(card), 200);
     };
     wrap.appendChild(el);
@@ -779,10 +771,8 @@ function onCardChosen(card) {
       ai.ownedSkills.push(c.id);
       ai.recalcStats();
     });
-    waitForRemotePicks().then(() => {
-      hideDrawCards();
-      startBattlePhase();
-    });
+    hideDrawCards();
+    startBattlePhase();
   }
 }
 function waitForRemotePicks() {
@@ -1036,11 +1026,13 @@ function stepPhysics(dt) {
         spawnFloat(tx, ty-30, '火箭降落!', '#fbbf24');
       }
     }
-    // 血港鬼影：血量低於 5 開 8 秒水下
-    if (b.hasGhost && b.ghostTimer <= 0 && b.hp <= 5) {
+    // 血港鬼影：血量低於 5 開 5 秒水下，用完冷卻 10 秒
+    if (b.hasGhost && b.ghostTimer <= 0 && b.ghostCooldown <= 0 && b.hp <= 5) {
       b.ghostTimer = 5;
+      b.ghostCooldown = 10;
       spawnFloat(b.x, b.y-30, '汪洋死域!', '#3b82f6');
     }
+    if (b.ghostCooldown > 0) b.ghostCooldown -= dt;
     // 鬼影領域：敵人每秒扣 2
     if (b.ghostTimer > 0) {
       alive.forEach(o => {
@@ -1294,6 +1286,7 @@ function updateHUD() {
   });
   const p = G.balls.find(b=>b.isPlayer);
   if (p) {
+    document.querySelector('.pp-ball').style.background = p.color;
     document.getElementById('pp-hp').style.width = Math.max(0,p.hp/p.maxHp*100)+'%';
     document.getElementById('pp-hp-text').textContent = Math.max(0,Math.round(p.hp))+' / '+p.maxHp;
     document.getElementById('pp-atk').textContent = p.atk||1;
@@ -1458,25 +1451,42 @@ let lastT = performance.now();
 function loop(now) {
   const dt = Math.min(0.033,(now-lastT)/1000);
   lastT = now;
-  if (G.state==='draw' && !G.net.isGuest) {
-    G.drawTimer -= dt;
+  if (G.state==='draw') {
+    if (!G.net.isGuest) G.drawTimer -= dt;
     const el = document.getElementById('draw-timer');
     if (el) el.textContent = Math.max(0,G.drawTimer).toFixed(1);
-    if (G.drawTimer <= 0 && document.getElementById('draw-cards').children.length > 0) {
+    if (!G.net.isGuest && G.drawTimer <= 0 && document.getElementById('draw-cards').children.length > 0) {
       onCardChosen(pick(G.currentCards));
     }
   }
-  if (G.state==='battle' && !G.net.isGuest) {
-    stepPhysics(dt);
-    const alive = G.balls.filter(b=>b.alive);
-    let roundOver = false;
-    if (G.teamMode) {
-      const teamsLeft = new Set(alive.map(b=>b.team));
-      roundOver = teamsLeft.size <= 1;
+  if (G.state==='battle') {
+    if (G.net.isGuest) {
+      // 客人：自己的球本地預測
+      const me = G.balls[G.myIndex];
+      if (me && me.alive) {
+        let dx = 0, dy = 0;
+        if (G.keys['w']) dy -= 1; if (G.keys['s']) dy += 1;
+        if (G.keys['a']) dx -= 1; if (G.keys['d']) dx += 1;
+        if (dx || dy) {
+          const m = Math.hypot(dx,dy);
+          me.vx = dx/m * me.speed; me.vy = dy/m * me.speed;
+        } else { me.vx *= 0.9; me.vy *= 0.9; }
+        me.x += me.vx*dt*60; me.y += me.vy*dt*60;
+      }
+      // 其他球插值
+      G.balls.forEach((b,i) => {
+        if (i === G.myIndex || !b.alive) return;
+        if (b._tx !== undefined) {
+          b.x += (b._tx - b.x) * 0.25;
+          b.y += (b._ty - b.y) * 0.25;
+        }
+      });
     } else {
-      roundOver = alive.length <= 1;
+      stepPhysics(dt);
+      const alive = G.balls.filter(b=>b.alive);
+      let roundOver = alive.length <= 1;
+      if (roundOver) endRound();
     }
-    if (roundOver) endRound();
   }
   G.floatTexts = G.floatTexts.filter(f=>{ f.life -= dt*1.2; return f.life>0; });
   render(); updateHUD();
@@ -1556,7 +1566,6 @@ document.getElementById('player-name-title').onclick = () => {
 renderPlayerName();
 
 // ---------- 主選單 ----------
-document.getElementById('btn-solo').onclick = () => startMatch(false);
 function startMatch(teamMode) {
   document.getElementById('menu-overlay').classList.add('hidden');
   document.getElementById('app').classList.remove('hud-hidden');
@@ -1714,11 +1723,25 @@ function joinGuestRoom() {
       document.getElementById('sub-overlay').classList.add('hidden');
       document.getElementById('menu-overlay').classList.add('hidden');
       document.getElementById('app').classList.remove('hud-hidden');
-      if (!G.balls || G.balls.length === 0) {
-        initGame(false); G.balls.forEach(b => b.recalcStats());
+      initGame(false);
+      if (data.ballStates) {
+        data.ballStates.forEach((bd, i) => {
+          if (G.balls[i]) {
+            G.balls[i].name = bd.name; G.balls[i].color = bd.color;
+            G.balls[i].x = bd.x; G.balls[i].y = bd.y;
+            G.balls[i].hp = bd.hp; G.balls[i].maxHp = bd.maxHp;
+            G.balls[i].atk = bd.atk; G.balls[i].speed = bd.speed;
+            G.balls[i].alive = true;
+          }
+        });
+      }
+      if (data.mapId) {
+        const mt = MAP_THEMES.find(m=>m.id===data.mapId);
+        if (mt) { G.mapTheme = mt; document.getElementById('arena-wrap').style.background = mt.bg; }
       }
       G.myIndex = data.myIndex || 0;
       G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
+      G.state = 'draw'; G.drawTimer = DRAW_TIME;
     }
   };
   ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
@@ -1731,27 +1754,9 @@ function startOnlineMatch(teamMode) {
   startMapVote();
 }
 function startMapVote() {
-  // 彈出地圖投票，10 秒
-  G.votes = {};
-  G.votes['host'] = MAP_THEMES[Math.floor(Math.random()*MAP_THEMES.length)].id;
-  showVoteUI();
-  // 告訴客人投票
-  if (G.net.ws && G.net.ws.readyState === 1) {
-    G.net.ws.send(JSON.stringify({ t:'mapVoteStart' }));
-  }
+  // 伺服器分配地圖，房主這邊只顯示等待
+  openSub('準備中', '<p style="font-size:20px">正在分配地圖…</p>');
   setTimeout(() => {
-    // 算票
-    const counts = {};
-    Object.values(G.votes).forEach(v => counts[v] = (counts[v]||0)+1);
-    let best = MAP_THEMES[0].id, bestN = -1;
-    Object.entries(counts).forEach(([k,v]) => { if (v>bestN) { bestN=v; best=k; } });
-    G.mapTheme = MAP_THEMES.find(m=>m.id===best) || MAP_THEMES[0];
-    document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
-    // 告訴客人結果
-    if (G.net.ws && G.net.ws.readyState === 1) {
-      G.net.ws.send(JSON.stringify({ t:'mapChosen', mapId: best }));
-    }
-    // 真正開始
     initGame(false, true);
     const pids = Object.keys(G.net.remoteBalls);
     pids.forEach((pid, i) => {
@@ -1762,6 +1767,7 @@ function startMapVote() {
       }
     });
     G.balls.forEach(b => b.recalcStats());
+    G.balls.forEach(b => b.launch(G.balls.filter(o=>o!==b)));
     if (G.net.ws && G.net.ws.readyState === 1) {
       const indexMap = {};
       Object.keys(G.net.remoteBalls).forEach(pid => {
@@ -1772,13 +1778,13 @@ function startMapVote() {
         name: b.name, color: b.color, x: b.x, y: b.y,
         hp: b.hp, maxHp: b.maxHp, atk: b.atk, speed: b.speed
       }));
-      G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap, ballStates, mapId: G.mapTheme.id }));
+      G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap, ballStates }));
     }
     startDrawPhase();
-  }, 10000);
+  }, 1500);
 }
 function showVoteUI() {
-  let html = '<div style="text-align:center;margin-top:20px"><h2>選擇地圖（10 秒）</h2><div style="display:flex;gap:20px;justify-content:center;margin-top:20px">';
+  let html = '<div style="text-align:center;margin-top:20px"><h2>選擇地圖</h2><div id="vote-cd" style="font-size:48px;color:#fbbf24;margin:10px 0">10</div><div style="display:flex;gap:20px;justify-content:center;margin-top:20px">';
   MAP_THEMES.forEach(m => {
     html += `<div class="vote-map" data-map="${m.id}" style="width:180px;height:120px;background:${m.bg};border:3px solid #444;border-radius:12px;cursor:pointer;position:relative">
       <div style="position:absolute;bottom:8px;left:0;right:0;color:#fff;font-weight:bold">${m.name}</div>
@@ -1787,7 +1793,16 @@ function showVoteUI() {
   });
   html += '</div></div>';
   openSub('地圖投票', html);
+  let cd = 10;
+  G.voteCd = setInterval(() => {
+    cd--;
+    const el = document.getElementById('vote-cd');
+    if (el) el.textContent = Math.max(0, cd);
+    if (cd <= 0) clearInterval(G.voteCd);
+  }, 1000);
   document.querySelectorAll('.vote-map').forEach(el => {
+    el.onmouseenter = () => el.style.borderColor = '#888';
+    el.onmouseleave = () => el.style.borderColor = '#444';
     el.onclick = () => {
       G.votes['host'] = el.dataset.map;
       renderVote();
@@ -1830,7 +1845,8 @@ function hostBroadcast() {
       skills: b.ownedSkills
     })),
     circleR: G.circle.r, circleTimer: G.circle.timer,
-    state: G.state, round: G.round
+    state: G.state, round: G.round,
+    drawTimer: G.drawTimer
   };
   G.net.ws.send(JSON.stringify(payload));
 }
@@ -1842,7 +1858,9 @@ function applyRemoteState(data) {
   }
   data.balls.forEach((bd, i) => {
     if (G.balls[i]) {
-      G.balls[i].x = bd.x; G.balls[i].y = bd.y;
+      if (i !== G.myIndex) {
+        G.balls[i]._tx = bd.x; G.balls[i]._ty = bd.y;
+      }
       G.balls[i].hp = bd.hp; G.balls[i].maxHp = bd.maxHp;
       G.balls[i].alive = bd.alive;
       G.balls[i].name = bd.name;
@@ -1851,6 +1869,13 @@ function applyRemoteState(data) {
       G.balls[i].speed = bd.spd || 2;
     }
   });
+  if (data.drawTimer !== undefined) G.drawTimer = data.drawTimer;
+  if (data.state) {
+    if (data.state === 'battle' && G.state === 'draw') {
+      hideDrawCards();
+    }
+    G.state = data.state;
+  }
   if (G.circle) { G.circle.r = data.circleR; G.circle.timer = data.circleTimer; }
   G.state = data.state;
   G.round = data.round;
