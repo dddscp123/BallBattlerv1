@@ -764,15 +764,11 @@ function onCardChosen(card) {
     if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'picked', cardId: card.id }));
     hideDrawCards();
   } else {
-    // 房主 or 單機：AI 自己抽
-    G.balls.filter(b => !b.isPlayer && !b.isRemote && b.alive).forEach(ai => {
-      const c = pick(CARD_POOL);
-      c.apply(ai, G.balls);
-      ai.ownedSkills.push(c.id);
-      ai.recalcStats();
+    // 房主：等所有遠端客人選完（或30秒到）才開打
+    waitForRemotePicks().then(() => {
+      hideDrawCards();
+      startBattlePhase();
     });
-    hideDrawCards();
-    startBattlePhase();
   }
 }
 function waitForRemotePicks() {
