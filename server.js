@@ -37,7 +37,7 @@ wss.on('connection', (ws) => {
       if (!room) { send(ws, { t: 'joinError', reason: '房間不存在' }); return; }
       room.guests.set(ws, { name: msg.name || '玩家' });
       ws.roomCode = msg.code;
-      send(ws, { t: 'joined', code: msg.code });
+      send(ws, { t: 'joined', code: msg.code, yourId: ws._wsId });
       send(room.host, { t: 'guestJoined', wsId: ws._wsId, name: msg.name });
     }
 
