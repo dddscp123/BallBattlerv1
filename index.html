@@ -1974,6 +1974,7 @@ window.addEventListener('keydown', e => {
   }
 });
 window.addEventListener('keyup', e => { G.keys[e.key.toLowerCase()] = false; });
+window.addEventListener('blur', () => { G.keys = {}; });
 
 // 邀請鏈接：?room=XXXX 自動加入
 (function(){
