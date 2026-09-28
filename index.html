@@ -86,6 +86,10 @@
   #draw-overlay .draw-timer { font-size: 16px; color: var(--gold); font-weight: 700; }
   #draw-cards { display: flex; gap: 20px; }
 
+  .card { transition: transform 0.12s; cursor:pointer; }
+  .card:hover { transform: scale(1.06); }
+  .card:active { transform: scale(0.98); }
+  .card.disabled { pointer-events:none; opacity:0.5; }
   .card {
     width: 210px; height: 280px;
     background: var(--panel); border-radius: 10px; padding: 10px;
@@ -219,8 +223,7 @@
       <div class="name-edit">點擊名字修改</div>
       <p>15 滴血開局，活到最後得 1 勝點，先到 3 勝點奪冠。每 45 秒縮圈。<br>操作：WASD 移動，Shift 衝刺撞人。</p>
       <div class="menu-btns">
-        <button class="btn primary" id="btn-solo">打人機</button>
-        <button class="btn" id="btn-duo">2v2 模式</button>
+        <button class="btn primary" id="btn-solo">人機對局</button>
         <button class="btn" id="btn-create">創建房間</button>
         <button class="btn" id="btn-join">加入房間</button>
       </div>
@@ -541,6 +544,14 @@ class Ball {
         if (Math.hypot(this.vx,this.vy) < 0.1) { this.vx=0; this.vy=0; }
       }
     }
+    // AI 球：如果速度太低，隨機給個方向
+    if (!this.isPlayer && !this.isRemote && this.chargeTimer <= 0) {
+      if (Math.hypot(this.vx, this.vy) < this.speed*0.5) {
+        const ang = Math.random()*Math.PI*2;
+        this.vx = Math.cos(ang)*this.speed;
+        this.vy = Math.sin(ang)*this.speed;
+      }
+    }
     this.x += this.vx*dt*60;
     this.y += this.vy*dt*60;
     if (this.x-this.radius<BOUND){this.x=BOUND+this.radius;this.vx=Math.abs(this.vx);}
@@ -635,7 +646,7 @@ const G = {
   turrets: [],
   bombSites: [],
   paralysisTimer: 0,
-  WS_URL: 'wss://ballbattlerv1.onrender.com',
+  WS_URL: 'wss://你的後端.onrender.com',
   net: { isHost:false, isGuest:false, peer:null, conn:null, conns:[], remoteInputs:{}, remoteBalls:{}, roomCode:'', lastBroadcast:0 },
   currentCards: [],
   hitCooldowns: new Map(),
@@ -681,6 +692,7 @@ function initGame(teamMode) {
 // ---------- 抽卡 ----------
 function startDrawPhase() {
   G.state = 'draw';
+  G.cardLocked = false;
   G.drawTimer = DRAW_TIME;
   document.getElementById('phase-tag').textContent = '選卡中';
   document.getElementById('phase-tag').className = 'phase-tag draw';
@@ -728,7 +740,12 @@ function showDrawCards(cards) {
       <div class="name">${card.name}</div>
       <div class="desc">${card.desc}</div>
     `;
-    el.onclick = () => onCardChosen(card);
+    el.onclick = () => {
+      if (G.cardLocked) return;
+      G.cardLocked = true;
+      document.querySelectorAll('#draw-cards .card').forEach(c => c.classList.add('disabled'));
+      onCardChosen(card);
+    };
     wrap.appendChild(el);
   });
   document.getElementById('draw-overlay').classList.remove('hidden');
@@ -742,23 +759,22 @@ function onCardChosen(card) {
   player.recalcStats();
   if (!store.seenSkills.includes(card.id)) { store.seenSkills.push(card.id); persist(); }
   spawnFloat(player.x, player.y - player.radius - 14, card.name, '#fff');
-  if (G.net.isHost) {
-    // 房主：AI 自己抽
+  if (G.net.isGuest) {
+    // 客人：把選擇發給房主
+    if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'picked', cardId: card.id }));
+    hideDrawCards();
+  } else {
+    // 房主 or 單機：AI 自己抽
     G.balls.filter(b => !b.isPlayer && !b.isRemote && b.alive).forEach(ai => {
       const c = pick(CARD_POOL);
       c.apply(ai, G.balls);
       ai.ownedSkills.push(c.id);
       ai.recalcStats();
     });
-    // 等所有遠端客人選完
     waitForRemotePicks().then(() => {
       hideDrawCards();
       startBattlePhase();
     });
-  } else {
-    // 客人：把選擇發給房主
-    if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'picked', cardId: card.id }));
-    hideDrawCards();
   }
 }
 function waitForRemotePicks() {
@@ -1496,7 +1512,6 @@ renderPlayerName();
 
 // ---------- 主選單 ----------
 document.getElementById('btn-solo').onclick = () => startMatch(false);
-document.getElementById('btn-duo').onclick = () => startMatch(true);
 function startMatch(teamMode) {
   document.getElementById('menu-overlay').classList.add('hidden');
   document.getElementById('app').classList.remove('hud-hidden');
