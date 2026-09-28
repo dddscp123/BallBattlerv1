@@ -192,6 +192,16 @@
   .dex-item .art img { width: 100%; height: 100%; object-fit: cover; }
   .dex-item.locked { opacity: 0.35; filter: grayscale(1); }
   .dex-item.locked .art > * { visibility: hidden; }
+
+  #auth-overlay { z-index: 30; }
+  #auth-overlay .auth-box { background: var(--panel); border:1px solid var(--line); border-radius:10px; padding:24px 28px; width:320px; }
+  #auth-overlay input { width:100%; padding:11px; margin:6px 0; border-radius:6px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:14px; }
+  #auth-overlay .auth-tabs { display:flex; gap:8px; margin-bottom:14px; }
+  #auth-overlay .auth-tabs button { flex:1; padding:8px; border:none; border-radius:6px; background:var(--panel-2); color:var(--dim); cursor:pointer; font-weight:700; }
+  #auth-overlay .auth-tabs button.on { background:var(--player); color:#0b0f14; }
+  #auth-overlay .auth-err { color:#ef4444; font-size:12px; min-height:16px; margin-top:6px; }
+  #auth-user { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:6px; }
+  #btn-logout { background:none; border:none; color:var(--dim); cursor:pointer; text-decoration:underline; font-size:12px; }
   .close-x {
     position: absolute; top: 14px; right: 18px;
     background: none; border: none; color: var(--dim);
@@ -204,6 +214,7 @@
   <header>
     <div class="title"><span class="dot"></span>球球大王</div>
     <div class="hud">
+      <span id="auth-user"></span>
       <span class="coin" id="coin-num">0</span>
       <span id="turn-num-wrap">回合 <b id="turn-num">1</b></span>
       <span id="circle-tag" class="phase-tag" style="color:#ef4444;border-color:#ef4444">縮圈 --</span>
@@ -223,6 +234,20 @@
       <div id="draw-cards"></div>
     </div>
 
+    <div id="auth-overlay" class="overlay">
+      <h1 style="cursor:default">球球大王</h1>
+      <p>請先登入帳號</p>
+      <div class="auth-box">
+        <div class="auth-tabs">
+          <button id="tab-login" class="on">登入</button>
+          <button id="tab-reg">註冊</button>
+        </div>
+        <input id="auth-name" type="text" placeholder="玩家名字" maxlength="10">
+        <input id="auth-pw" type="password" placeholder="密碼（至少6位）">
+        <button class="btn primary" id="btn-auth-go" style="width:100%;margin-top:6px">登入</button>
+        <div class="auth-err" id="auth-err"></div>
+      </div>
+    </div>
     <div id="menu-overlay" class="overlay">
       <h1 id="player-name-title">玩家</h1>
       <div class="name-edit">點擊名字修改</div>
@@ -290,6 +315,97 @@
 <img src="assets/beast.png" alt="" style="display:none">
 <img src="assets/tank.png" alt="" style="display:none">
 
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+<script>
+// ===== Firebase =====
+const FB_CONFIG = {
+  apiKey: "AIzaSyB7qmrjeTbsh_OYTipxUYzqpMlhiV-8zlc",
+  authDomain: "ball-game-5e834.firebaseapp.com",
+  projectId: "ball-game-5e834",
+  storageBucket: "ball-game-5e834.firebasestorage.app",
+  messagingSenderId: "1088949837384",
+  appId: "1:1088949837384:web:c171c81a7e26f77228c27d"
+};
+firebase.initializeApp(FB_CONFIG);
+const db = firebase.firestore();
+
+const auth = firebase.auth();
+let currentUser = null;
+// 分頁切換
+let authMode = 'login';
+function setAuthMode(m){
+  authMode = m;
+  document.getElementById('tab-login').classList.toggle('on', m==='login');
+  document.getElementById('tab-reg').classList.toggle('on', m==='reg');
+  document.getElementById('btn-auth-go').textContent = m==='login'?'登入':'註冊新帳號';
+  document.getElementById('auth-err').textContent='';
+}
+document.getElementById('tab-login').onclick=()=>setAuthMode('login');
+document.getElementById('tab-reg').onclick=()=>setAuthMode('reg');
+// Email 登入/註冊
+function nameToEmail(name){
+  // 名字轉成合法假 email：只留英數，中文用字符編碼
+  const clean = name.trim().toLowerCase().replace(/[^a-z0-9一-龥]/g,'');
+  return 'u' + clean.split('').map(c=>c.charCodeAt(0).toString(36)).join('') + '@ball.local';
+}
+document.getElementById('btn-auth-go').onclick = () => {
+  const name = document.getElementById('auth-name').value.trim();
+  const pw = document.getElementById('auth-pw').value;
+  const errEl = document.getElementById('auth-err');
+  errEl.textContent='';
+  if(!name||pw.length<4){ errEl.textContent='請輸入名字，密碼至少 4 位'; return; }
+  const email = nameToEmail(name);
+  const p = authMode==='login'
+    ? auth.signInWithEmailAndPassword(email,pw)
+    : auth.createUserWithEmailAndPassword(email,pw).then(cr => cr.user.updateProfile({displayName:name}));
+  p.then(() => { if(store.playerName!==name){store.playerName=name.slice(0,10);persist();renderPlayerName();} })
+   .catch(e => {
+     let msg = e.message.replace('Firebase:','');
+     if(authMode==='login' && e.code==='auth/user-not-found') msg='沒有這個帳號，請切換到註冊';
+     if(e.code==='auth/email-already-in-use') msg='名字已被註冊，請切換到登入';
+     if(e.code==='auth/wrong-password') msg='密碼錯誤';
+     errEl.textContent = msg;
+   });
+};
+// 監聽登入狀態
+auth.onAuthStateChanged(user => {
+  currentUser = user;
+  const authOv = document.getElementById('auth-overlay');
+  if (user) {
+    authOv.classList.add('hidden');
+    const nm = user.displayName || '玩家';
+    document.getElementById('auth-user').innerHTML = '✓ '+nm+' <button id="btn-logout">登出</button>';
+    document.getElementById('btn-logout').onclick = () => auth.signOut();
+    // 自動帶入玩家名
+    if (!store.playerName || store.playerName==='玩家') { store.playerName = nm.slice(0,10); persist(); renderPlayerName(); }
+  } else {
+    authOv.classList.remove('hidden');
+    document.getElementById('auth-user').textContent='';
+  }
+});
+
+
+// 寫入一場戰績
+function saveMatchResult(winnerName, rounds, isWin) {
+  db.collection('matchHistory').add({
+    winner: winnerName, rounds: rounds,
+    playerName: store.playerName, isWin: isWin,
+    time: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(e => console.log('Firebase 寫入失敗', e));
+}
+// 讀排行榜（勝場數）
+async function loadLeaderboard() {
+  const snap = await db.collection('matchHistory').where('isWin','==',true).limit(100).get();
+  const counts = {};
+  snap.forEach(d => {
+    const n = d.data().playerName || '?';
+    counts[n] = (counts[n]||0)+1;
+  });
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,10);
+}
+</script>
 <script>
 /* =========================================================
  *  球球大王
@@ -927,6 +1043,7 @@ function gameOver(winner) {
   document.getElementById('phase-tag').textContent = '結束';
   document.getElementById('end-title').textContent = winner.isPlayer ? '你奪冠了' : `${winner.name} 奪冠`;
   document.getElementById('end-desc').textContent = `共打了 ${G.round} 輪。`;
+  saveMatchResult(winner.name, G.round, winner.isPlayer);
   document.getElementById('end-overlay').classList.remove('hidden');
   updateHUD();
 }
@@ -1599,7 +1716,19 @@ function openSub(title, html) {
 }
 document.getElementById('btn-close-sub').onclick = () => document.getElementById('sub-overlay').classList.add('hidden');
 document.getElementById('btn-shop').onclick = () => openSub('皮膚商店', `<p>皮膚系統開發中。當前金幣：<b style="color:var(--gold)">${store.coins}</b></p>`);
-document.getElementById('btn-rank').onclick = () => openSub('排行榜', `<p>本地戰績：${store.games} 場，${store.wins} 勝。</p>`);
+document.getElementById('btn-rank').onclick = async () => {
+  openSub('排行榜', '<p>載入中…</p>');
+  try {
+    const rows = await loadLeaderboard();
+    const html = rows.length
+      ? '<table style="margin:10px auto;border-collapse:collapse"><tr><th style="padding:6px 20px">#</th><th>玩家</th><th>勝場</th></tr>' +
+        rows.map((r,i)=>`<tr><td style="padding:6px;color:#fbbf24">${i+1}</td><td>${r[0]}</td><td><b>${r[1]}</b></td></tr>`).join('') + '</table>'
+      : '<p>還沒有戰績，去打一場！</p>';
+    document.getElementById('sub-body').innerHTML = html + `<p style="margin-top:10px">本地：${store.games} 場，${store.wins} 勝</p>`;
+  } catch(e) {
+    document.getElementById('sub-body').innerHTML = `<p>排行榜載入失敗。本地：${store.games} 場，${store.wins} 勝</p>`;
+  }
+};
 document.getElementById('btn-dex').onclick = () => {
   const order = { common:0, rare:1, epic:2, legendary:3, divine:4 };
   const sorted = [...CARD_POOL].sort((a,b)=>order[a.rarity]-order[b.rarity]);
