@@ -1516,9 +1516,16 @@ function loop(now) {
           document.getElementById('sub-overlay').classList.add('hidden');
           document.getElementById('menu-overlay').classList.add('hidden');
           document.getElementById('app').classList.remove('hud-hidden');
-          if (!G.balls || G.balls.length === 0) { initGame(false); G.balls.forEach(b=>b.recalcStats()); }
+          nextId = 1;
+          G.balls = (data.ballStates||[]).map((bd,i) => {
+            const b = new Ball({ name: bd.name, color: bd.color, isPlayer: false });
+            b.x = bd.x; b.y = bd.y; b.hp = bd.hp; b.maxHp = bd.maxHp;
+            b.atk = bd.atk; b.speed = bd.speed; b.alive = true;
+            return b;
+          });
           G.myIndex = data.myIndex || 0;
-          G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
+          if (G.balls[G.myIndex]) G.balls[G.myIndex].isPlayer = true;
+          G.state = 'draw'; G.drawTimer = DRAW_TIME;
         }
       };
     }, 300);
