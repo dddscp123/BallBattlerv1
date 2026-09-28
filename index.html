@@ -712,6 +712,8 @@ function initGame(teamMode, keepMap) {
 function startDrawPhase() {
   G.state = 'draw';
   G.cardLocked = false;
+  G.hostPicked = false;
+  G.pendingPicks = {};
   document.getElementById('sub-overlay').classList.add('hidden');
   G.cardLocked = false;
   G.drawTimer = DRAW_TIME;
@@ -861,6 +863,8 @@ function onDrawTimeout() {
 // ---------- 戰鬥 ----------
 function startBattlePhase() {
   G.state = 'battle';
+  document.getElementById('draw-overlay').classList.add('hidden');
+  document.getElementById('sub-overlay').classList.add('hidden');
   document.getElementById('phase-tag').textContent = '戰鬥中';
   document.getElementById('phase-tag').className = 'phase-tag battle';
   G.circle.r = Math.hypot(W,H);
@@ -1912,7 +1916,7 @@ function applyRemoteState(data) {
   });
   if (data.drawTimer !== undefined) G.drawTimer = data.drawTimer;
   if (data.state) {
-    if (data.state === 'battle' && G.state === 'draw') hideDrawCards();
+    if (data.state === 'battle') { hideDrawCards(); document.getElementById('draw-overlay').classList.add('hidden'); }
     G.state = data.state;
   }
   if (G.circle) { G.circle.r = data.circleR; G.circle.timer = data.circleTimer; }
