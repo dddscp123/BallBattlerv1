@@ -712,8 +712,8 @@ function startDrawPhase() {
       if (!ball) return;
       const cards = rollCards(3);
       G.pendingPicks[pid] = { ball, cards, picked:false };
-      // 用 guestTarget 指定給哪個客人
-      G.net.ws.send(JSON.stringify({ t:'drawCards', guestTarget: pid, cards: cards.map(c=>({id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon})) }));
+      // 廣播給所有人，客人用 myPid 過濾
+      G.net.ws.send(JSON.stringify({ t:'drawCards', forPid: pid, cards: cards.map(c=>({id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon})) }));
     });
   }
   updateHUD();
@@ -1504,7 +1504,7 @@ function loop(now) {
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
-        if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
+        if (data.t === 'joined') { G.net.guestId = data.yourId; openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>'); }
         if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
         if (data.t === 'mapChosen') {
       G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
@@ -1688,7 +1688,7 @@ function joinGuestRoom() {
   ws.onmessage = (e) => {
     const data = JSON.parse(e.data);
     if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
-    if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
+    if (data.t === 'joined') { G.net.guestId = data.yourId; openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>'); }
     if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
     if (data.t === 'mapVoteStart') {
       G.myVotes = {};
@@ -1712,6 +1712,8 @@ function joinGuestRoom() {
     }
     if (data.t === 'state') applyRemoteState(data);
     if (data.t === 'drawCards') {
+      // 只處理給自己的牌
+      if (G.net.guestId && data.forPid && data.forPid !== G.net.guestId) return;
       G.state = 'draw'; G.drawTimer = DRAW_TIME;
       document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
       showDrawCards(data.cards.map(c => ({
@@ -1930,7 +1932,7 @@ window.addEventListener('keyup', e => { G.keys[e.key.toLowerCase()] = false; });
       ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
         if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
-        if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
+        if (data.t === 'joined') { G.net.guestId = data.yourId; openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>'); }
         if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
         if (data.t === 'mapChosen') {
       G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
