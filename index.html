@@ -1515,6 +1515,15 @@ let lastT = performance.now();
 function loop(now) {
   const dt = Math.min(0.033,(now-lastT)/1000);
   lastT = now;
+  // 客人：所有非自己的球永遠往目標位置插值
+  if (G.net.isGuest) {
+    G.balls.forEach((b,i) => {
+      if (i === G.myIndex) return;
+      if (b._tx !== undefined) {
+        b.x += (b._tx-b.x)*0.3; b.y += (b._ty-b.y)*0.3;
+      }
+    });
+  }
   if (G.state==='draw') {
     if (!G.net.isGuest) {
       G.drawTimer -= dt;
@@ -1537,10 +1546,7 @@ function loop(now) {
         } else { me.vx *= 0.9; me.vy *= 0.9; }
         me.x += me.vx*dt*60; me.y += me.vy*dt*60;
       }
-      G.balls.forEach((b,i) => {
-        if (i === G.myIndex || !b.alive) return;
-        if (b._tx !== undefined) { b.x += (b._tx-b.x)*0.3; b.y += (b._ty-b.y)*0.3; }
-      });
+
     } else {
       stepPhysics(dt);
       const alive = G.balls.filter(b=>b.alive);
@@ -1898,7 +1904,17 @@ function hostBroadcast() {
   G.net.ws.send(JSON.stringify(payload));
 }
 function applyRemoteState(data) {
-  if (!G.balls || G.balls.length === 0) return;
+  if (!G.balls || G.balls.length !== data.balls.length) {
+    // 球數對不上，直接重建
+    nextId = 1;
+    G.balls = data.balls.map(bd => {
+      const b = new Ball({ name: bd.name, color: bd.color, isPlayer: false });
+      b.x = bd.x; b.y = bd.y; b.hp = bd.hp; b.maxHp = bd.maxHp;
+      b.atk = bd.atk||1; b.speed = bd.spd||2; b.alive = bd.alive;
+      return b;
+    });
+    if (G.balls[G.myIndex]) G.balls[G.myIndex].isPlayer = true;
+  }
   data.balls.forEach((bd, i) => {
     const lb = G.balls[i];
     if (!lb) return;
