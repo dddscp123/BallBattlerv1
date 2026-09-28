@@ -192,8 +192,6 @@
     font-size: 24px; cursor: pointer;
   }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 <div id="app" class="hud-hidden">
@@ -716,8 +714,7 @@ function startDrawPhase() {
       const cards = rollCards(3);
       G.pendingPicks[pid] = { ball, cards, picked:false };
       // 用 guestTarget 指定給哪個客人
-      const conn = G.net.conns.find(c => c.peer === pid);
-      if (conn) conn.send({ t:'drawCards', cards: cards.map(c=>({id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon})) });
+      G.net.ws.send(JSON.stringify({ t:'drawCards', guestTarget: pid, cards: cards.map(c=>({id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon})) }));
     });
   }
   updateHUD();
@@ -763,7 +760,7 @@ function onCardChosen(card) {
   spawnFloat(player.x, player.y - player.radius - 14, card.name, '#fff');
   if (G.net.isGuest) {
     // 客人：把選擇發給房主
-    if (G.net.conn && G.net.conn.open) G.net.conn.send({ t:'picked', cardId: card.id });
+    if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'picked', cardId: card.id }));
     hideDrawCards();
   } else {
     // 房主 or 單機：AI 自己抽
@@ -1533,85 +1530,76 @@ function genRoomCode() {
   return r;
 }
 function createHostRoom() {
-  const code = genRoomCode();
-  const peer = new Peer('qqdw-'+code);
   G.net.isHost = true;
-  G.net.roomCode = code;
-  peer.on('open', id => {
-    openSub('創建房間', `<p>房號：<b style="font-size:24px;color:#fbbf24;letter-spacing:4px">${code}</b></p>
-      <p>把房號告訴朋友，等他加入…</p>
-      <div id="net-player-list" style="margin:10px 0">等待玩家加入…</div>
-      <button class="btn primary" id="btn-net-start">開始遊戲</button>`);
-    document.getElementById('btn-net-start').onclick = () => startOnlineMatch(true);
-  });
-  peer.on('connection', conn => {
-    conn.on('open', () => {
-      G.net.conns.push(conn);
-      const pid = conn.peer;
-      conn.on('data', data => {
-        if (data.t === 'input') G.net.remoteInputs[pid] = data.keys;
-        if (data.t === 'dash') {
-          const b = G.balls.find(x => x.remoteId === pid);
-          if (b && b.alive) {
-            let ang = Math.atan2(b.vy, b.vx);
-            if (Math.hypot(b.vx,b.vy) < 0.1) ang = Math.random()*Math.PI*2;
-            b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
-          }
-        }
-        if (data.t === 'name') {
-          G.net.remoteBalls[pid] = { name: data.name, conn };
-          renderNetLobby();
-        }
-        if (data.t === 'picked' && G.pendingPicks && G.pendingPicks[pid]) {
-          const p = G.pendingPicks[pid];
-          const card = CARD_POOL.find(c => c.id === data.cardId) || p.cards[0];
-          card.apply(p.ball, G.balls);
-          p.ball.ownedSkills.push(card.id); p.ball.recalcStats(); p.picked = true;
-        }
-      });
-      conn.send({ t:'welcome' });
+  const ws = new WebSocket(G.WS_URL);
+  G.net.ws = ws;
+  ws.onopen = () => ws.send(JSON.stringify({ t:'createRoom' }));
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.t === 'roomCreated') {
+      G.net.roomCode = data.code;
+      openSub('創建房間', `<p>房號：<b style="font-size:24px;color:#fbbf24;letter-spacing:4px">${data.code}</b></p>
+        <p>把房號告訴朋友，等他加入…</p>
+        <div id="net-player-list" style="margin:10px 0">等待玩家加入…</div>
+        <button class="btn primary" id="btn-net-start">開始遊戲</button>`);
+      document.getElementById('btn-net-start').onclick = () => startOnlineMatch(true);
+    }
+    if (data.t === 'guestJoined') {
+      G.net.remoteBalls[data.wsId] = { name: data.name };
       renderNetLobby();
-    });
-  });
-  peer.on('error', err => openSub('錯誤', '<p>PeerJS 錯誤：'+err.type+'</p>'));
+    }
+    if (data.t === 'guestLeft') { delete G.net.remoteBalls[data.wsId]; renderNetLobby(); }
+    if (data.t === 'input' && data.fromGuest) G.net.remoteInputs[data.fromGuest] = data.keys;
+    if (data.t === 'dash' && data.fromGuest) {
+      const b = G.balls.find(x => x.remoteId === data.fromGuest);
+      if (b && b.alive) {
+        let ang = Math.atan2(b.vy, b.vx);
+        if (Math.hypot(b.vx,b.vy) < 0.1) ang = Math.random()*Math.PI*2;
+        b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
+      }
+    }
+    if (data.t === 'picked' && data.fromGuest && G.pendingPicks && G.pendingPicks[data.fromGuest]) {
+      const p = G.pendingPicks[data.fromGuest];
+      const card = CARD_POOL.find(c => c.id === data.cardId) || p.cards[0];
+      card.apply(p.ball, G.balls);
+      p.ball.ownedSkills.push(card.id); p.ball.recalcStats(); p.picked = true;
+    }
+  };
+  ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
 }
 function joinGuestRoom() {
   const code = prompt('輸入房號：');
   if (!code) return;
-  const peer = new Peer();
   G.net.isGuest = true;
-  peer.on('open', id => {
-    openSub('加入房間', '<p>正在連接 '+code.toUpperCase()+' …</p>');
-    const conn = peer.connect('qqdw-'+code.toUpperCase());
-    G.net.conn = conn;
-    conn.on('open', () => {
-      conn.send({ t:'name', name: store.playerName || '玩家' });
-      openSub('等待房主', '<p>已連接，等房主開始…</p>');
-    });
-    conn.on('data', data => {
-      if (data.t === 'state') applyRemoteState(data);
-      if (data.t === 'drawCards') {
-        G.state = 'draw'; G.drawTimer = DRAW_TIME;
-        document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
-        showDrawCards(data.cards.map(c => ({
-          id: c.id, name: c.name, desc: c.desc, rarity: c.rarity,
-          img: c.img, icon: c.icon, apply: ()=>{}
-        })));
+  const ws = new WebSocket(G.WS_URL);
+  G.net.ws = ws;
+  ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code.toUpperCase(), name: store.playerName || '玩家' }));
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
+    if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
+    if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
+    if (data.t === 'state') applyRemoteState(data);
+    if (data.t === 'drawCards') {
+      G.state = 'draw'; G.drawTimer = DRAW_TIME;
+      document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
+      showDrawCards(data.cards.map(c => ({
+        id: c.id, name: c.name, desc: c.desc, rarity: c.rarity,
+        img: c.img, icon: c.icon, apply: ()=>{}
+      })));
+    }
+    if (data.t === 'start') {
+      document.getElementById('sub-overlay').classList.add('hidden');
+      document.getElementById('menu-overlay').classList.add('hidden');
+      document.getElementById('app').classList.remove('hud-hidden');
+      if (!G.balls || G.balls.length === 0) {
+        initGame(false); G.balls.forEach(b => b.recalcStats());
       }
-      if (data.t === 'start') {
-        document.getElementById('sub-overlay').classList.add('hidden');
-        document.getElementById('menu-overlay').classList.add('hidden');
-        document.getElementById('app').classList.remove('hud-hidden');
-        if (!G.balls || G.balls.length === 0) {
-          initGame(false); G.balls.forEach(b => b.recalcStats());
-        }
-        G.myIndex = data.myIndex || 0;
-        G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
-      }
-    });
-    conn.on('close', () => openSub('斷線', '<p>房主已離開。</p>'));
-  });
-  peer.on('error', err => openSub('錯誤', '<p>連接失敗：'+err.type+'</p>'));
+      G.myIndex = data.myIndex || 0;
+      G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
+    }
+  };
+  ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
 }
 function startOnlineMatch(teamMode) {
   // 房主：建立球場，把遠端玩家加成 remote ball
@@ -1633,14 +1621,18 @@ function startOnlineMatch(teamMode) {
   });
   G.balls.forEach(b => b.recalcStats());
   G.balls.forEach(b => b.launch(G.balls.filter(o=>o!==b)));
-  G.net.conns.forEach(c => {
-    const idx = G.balls.findIndex(b => b.remoteId === c.peer);
-    c.send({ t:'start', myIndex: idx });
-  });
+  if (G.net.ws && G.net.ws.readyState === 1) {
+    const indexMap = {};
+    Object.keys(G.net.remoteBalls).forEach(pid => {
+      const idx = G.balls.findIndex(b => b.remoteId === pid);
+      indexMap[G.net.remoteBalls[pid].name] = idx;
+    });
+    G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap }));
+  }
   startDrawPhase();
 }
 function hostBroadcast() {
-  if (!G.net.isHost) return;
+  if (!G.net.isHost || !G.net.ws || G.net.ws.readyState !== 1) return;
   const payload = {
     t: 'state',
     balls: G.balls.map(b => ({
@@ -1653,7 +1645,7 @@ function hostBroadcast() {
     circleR: G.circle.r, circleTimer: G.circle.timer,
     state: G.state, round: G.round
   };
-  G.net.conns.forEach(c => { try { c.send(payload); } catch(e){} });
+  G.net.ws.send(JSON.stringify(payload));
 }
 function applyRemoteState(data) {
   // 客人：用房主狀態覆蓋本地球
@@ -1683,8 +1675,8 @@ function applyRemoteState(data) {
 }
 // 客人：發送輸入
 setInterval(() => {
-  if (G.net.isGuest && G.net.conn && G.net.conn.open) {
-    G.net.conn.send({ t:'input', keys: {...G.keys} });
+  if (G.net.isGuest && G.net.ws && G.net.ws.readyState === 1) {
+    G.net.ws.send(JSON.stringify({ t:'input', keys: {...G.keys} }));
   }
   if (G.net.isHost) hostBroadcast();
 }, 50);
@@ -1708,8 +1700,8 @@ window.addEventListener('keydown', e => {
       p.vy = Math.sin(ang) * p.speed * 3;
       G.dashTime = 0.25;
       G.dashCd = 2.0;
-      if (G.net.isGuest && G.net.conn && G.net.conn.open) {
-        G.net.conn.send({ t:'dash' });
+      if (G.net.isGuest && G.net.ws && G.net.ws.readyState === 1) {
+        G.net.ws.send(JSON.stringify({ t:'dash' }));
       }
       spawnFloat(p.x, p.y-30, '衝刺!', '#fbbf24');
     }
