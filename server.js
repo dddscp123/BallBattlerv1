@@ -12,6 +12,10 @@ const queue = []; // 快速配對佇列
 function send(ws, obj) {
   if (ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
+// 每 30 秒 ping 所有連線，保持活躍
+setInterval(() => {
+  wss.clients.forEach(ws => { if (ws.readyState === 1) ws.ping(); });
+}, 30000);
 function broadcastRoom(room, msg) {
   send(room.host, msg);
   room.guests.forEach((g, guestWs) => send(guestWs, msg));
@@ -65,13 +69,16 @@ wss.on('connection', (ws) => {
 
     else if (msg.t === 'hostStart') {
       const room = rooms[ws.roomCode];
-      if (!room || room.host !== ws) return;
-      // 伺服器隨機分配地圖
+      if (!room || room.host !== ws) { console.log('hostStart: 無房間或非房主'); return; }
       const maps = ['original','grass','hell','cyber'];
       const mapId = maps[Math.floor(Math.random()*maps.length)];
       send(room.host, { t:'mapChosen', mapId });
+      let gi = 0;
       room.guests.forEach((g, guestWs) => {
-        send(guestWs, { t: 'start', myIndex: msg.indexMap[g.name], ballStates: msg.ballStates, mapId });
+        const myIdx = msg.indexMap[g.name] !== undefined ? msg.indexMap[g.name] : gi+1;
+        console.log('轉發 start 給客人', g.name, 'myIndex=', myIdx);
+        send(guestWs, { t: 'start', myIndex: myIdx, ballStates: msg.ballStates, mapId });
+        gi++;
       });
     }
 
