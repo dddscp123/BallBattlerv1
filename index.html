@@ -89,6 +89,12 @@
   .card { transition: transform 0.12s; cursor:pointer; }
   .card:hover { transform: scale(1.06); }
   .card:active { transform: scale(0.98); }
+  @keyframes dealIn {
+    from { transform: translateY(400px) scale(0.5); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+  }
+  .card.deal-in { animation: dealIn 0.45s cubic-bezier(0.22,1,0.36,1) both; }
+  .card { width: 170px !important; min-height: 240px !important; }
   .card.disabled { pointer-events:none; opacity:0.5; }
   .card {
     width: 210px; height: 280px;
@@ -223,6 +229,7 @@
       <p>15 滴血開局，活到最後得 1 勝點，先到 3 勝點奪冠。每 45 秒縮圈。<br>操作：WASD 移動，Shift 衝刺撞人。</p>
       <div class="menu-btns">
         <button class="btn primary" id="btn-solo">人機對局</button>
+        <button class="btn" id="btn-quick">快速配對</button>
         <button class="btn" id="btn-create">創建房間</button>
         <button class="btn" id="btn-join">加入房間</button>
       </div>
@@ -301,6 +308,7 @@ const MAP_THEMES = [
   { id:'original', name:'原版', bg:'#0f1620', dot:'rgba(255,255,255,0.04)', grid:'#2a3442' },
   { id:'grass',    name:'草原', bg:'#14281a', dot:'rgba(180,255,180,0.05)', grid:'#2d4a35' },
   { id:'hell',     name:'地獄', bg:'#2a1010', dot:'rgba(255,180,180,0.05)', grid:'#5a2a2a' },
+  { id:'cyber',    name:'賽博', bg:'#1a0a2e', dot:'rgba(180,120,255,0.06)', grid:'#4a2a6a' },
 ];
 
 const RARITY = {
@@ -387,7 +395,7 @@ const CARD_POOL = [
   { id:'l_revive', name:'扣一復活老大', rarity:'legendary', img:'assets/revive.png',
     desc:'技能：復活。死亡後自動復活回滿血，接下來 5 秒攻擊 +3',
     apply: b => { b.canRevive = true; b.reviveUsed = false; } },
-  { id:'l_soul', name:'靈魂收割', rarity:'legendary', img:'assets/soul.png',
+  { id:'e_soul', name:'靈魂收割', rarity:'epic', img:'assets/soul.png',
     desc:'擊殺對手後回 5 血並 +5 血上限',
     apply: b => { b.hasSoul = true; } },
   { id:'l_wither', name:'凋零怪', rarity:'legendary', img:'assets/wither.png',
@@ -408,7 +416,7 @@ const CARD_POOL = [
   { id:'l_ghost', name:'血港鬼影', rarity:'legendary', img:'assets/ghost.png',
     desc:'血量低於 5 時開 5 秒水下：移速 +20%、免疫傷害且無法攻擊，80 藍圈內敵人每秒 -2',
     apply: b => { b.hasGhost = true; b.ghostTimer = 0; } },
-  { id:'l_paralyze', name:'癱瘓', rarity:'legendary', img:'assets/paralyze.png',
+  { id:'e_paralyze', name:'癱瘓', rarity:'epic', img:'assets/paralyze.png',
     desc:'技能：沉默。選擇後停用全部玩家技能 5 秒',
     apply: () => { G.paralysisTimer = 5; spawnFloat(W/2, H/2, '全場技能封印 5 秒!', '#a855f7'); } },
   { id:'l_beast', name:'天水圍墮天地獄獸', rarity:'legendary', img:'assets/beast.png',
@@ -661,10 +669,10 @@ const G = {
   dashTime: 0,
 };
 
-function initGame(teamMode) {
+function initGame(teamMode, keepMap) {
   nextId = 1;
   G.teamMode = !!teamMode;
-  G.mapTheme = MAP_THEMES[Math.floor(Math.random()*MAP_THEMES.length)];
+  if (!keepMap) G.mapTheme = MAP_THEMES[Math.floor(Math.random()*MAP_THEMES.length)];
   document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
   const teamColor = ['#22d3ee','#ef4444'];
   if (G.teamMode) {
@@ -729,15 +737,16 @@ function showDrawCards(cards) {
   G.currentCards = cards;
   const wrap = document.getElementById('draw-cards');
   wrap.innerHTML = '';
-  cards.forEach(card => {
+  cards.forEach((card, idx) => {
     const el = document.createElement('div');
-    el.className = `card r-${card.rarity}`;
+    el.className = `card r-${card.rarity} deal-in`;
+    el.style.animationDelay = (idx * 0.18) + 's';
     const artInner = card.img ? `<img src="${card.img}" alt="">` : card.icon;
     el.innerHTML = `
       <div class="rarity-tag r-${card.rarity}">${RARITY[card.rarity].name}</div>
       <div class="art">${artInner}</div>
-      <div class="name">${card.name}</div>
-      <div class="desc">${card.desc}</div>
+      <div class="name" style="font-size:20px">${card.name}</div>
+      <div class="desc" style="font-size:14px">${card.desc}</div>
     `;
     el.onclick = () => {
       if (G.cardLocked) return;
@@ -1471,7 +1480,46 @@ function loop(now) {
   }
   G.floatTexts = G.floatTexts.filter(f=>{ f.life -= dt*1.2; return f.life>0; });
   render(); updateHUD();
-  requestAnimationFrame(loop);
+  // 邀請鏈接：?room=XXXX 自動加入
+(function(){
+  const m = location.search.match(/room=([A-Z0-9]+)/i);
+  if (m) {
+    setTimeout(() => {
+      const code = m[1].toUpperCase();
+      openSub('加入房間', '<p>透過邀請鏈接加入 '+code+' …</p>');
+      G.net.isGuest = true;
+      const ws = new WebSocket(G.WS_URL);
+      G.net.ws = ws;
+      ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code, name: store.playerName || '玩家' }));
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
+        if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
+        if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
+        if (data.t === 'mapChosen') {
+      G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
+      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+    }
+    if (data.t === 'state') applyRemoteState(data);
+        if (data.t === 'drawCards') {
+          G.state = 'draw'; G.drawTimer = DRAW_TIME;
+          document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
+          showDrawCards(data.cards.map(c => ({ id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon, apply:()=>{} })));
+        }
+        if (data.t === 'start') {
+          document.getElementById('sub-overlay').classList.add('hidden');
+          document.getElementById('menu-overlay').classList.add('hidden');
+          document.getElementById('app').classList.remove('hud-hidden');
+          if (!G.balls || G.balls.length === 0) { initGame(false); G.balls.forEach(b=>b.recalcStats()); }
+          G.myIndex = data.myIndex || 0;
+          G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
+        }
+      };
+    }, 300);
+  }
+})();
+
+requestAnimationFrame(loop);
 }
 
 // ---------- 子介面 ----------
@@ -1515,9 +1563,12 @@ function startMatch(teamMode) {
   G.lastWinnerId = null;
   initGame(teamMode);
   G.balls.forEach(b => b.recalcStats());
+  G.mapTheme = MAP_THEMES[Math.floor(Math.random()*MAP_THEMES.length)];
+  document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
   G.balls.forEach(b => b.launch(G.balls.filter(o=>o!==b)));
   startDrawPhase();
-};
+}
+document.getElementById('btn-quick').onclick = quickMatch;
 document.getElementById('btn-create').onclick = createHostRoom;
 document.getElementById('btn-join').onclick = joinGuestRoom;
 // ---------- 聯機 (PeerJS P2P) ----------
@@ -1537,16 +1588,21 @@ function createHostRoom() {
     if (data.t === 'roomCreated') {
       G.net.roomCode = data.code;
       openSub('創建房間', `<p>房號：<b style="font-size:24px;color:#fbbf24;letter-spacing:4px">${data.code}</b></p>
-        <p>把房號告訴朋友，等他加入…</p>
-        <div id="net-player-list" style="margin:10px 0">等待玩家加入…</div>
+        <div id="net-slots" style="display:flex;gap:16px;justify-content:center;margin:20px 0;flex-wrap:wrap"></div>
+        <button class="btn" id="btn-invite">複製邀請鏈接</button>
         <button class="btn primary" id="btn-net-start">開始遊戲</button>`);
+      renderNetSlots();
+      document.getElementById('btn-invite').onclick = () => {
+        const url = location.origin + location.pathname + '?room=' + data.code;
+        navigator.clipboard.writeText(url).then(() => alert('邀請鏈接已複製:\n' + url));
+      };
       document.getElementById('btn-net-start').onclick = () => startOnlineMatch(true);
     }
     if (data.t === 'guestJoined') {
       G.net.remoteBalls[data.wsId] = { name: data.name };
-      renderNetLobby();
+      renderNetSlots();
     }
-    if (data.t === 'guestLeft') { delete G.net.remoteBalls[data.wsId]; renderNetLobby(); }
+    if (data.t === 'guestLeft') { delete G.net.remoteBalls[data.wsId]; renderNetSlots(); }
     if (data.t === 'input' && data.fromGuest) G.net.remoteInputs[data.fromGuest] = data.keys;
     if (data.t === 'dash' && data.fromGuest) {
       const b = G.balls.find(x => x.remoteId === data.fromGuest);
@@ -1565,6 +1621,55 @@ function createHostRoom() {
   };
   ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
 }
+function quickMatch() {
+  // 嘗試加入 quick 房，失敗就創一個
+  const ws = new WebSocket(G.WS_URL);
+  G.net.ws = ws;
+  ws.onopen = () => ws.send(JSON.stringify({ t:'createRoom' }));
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.t === 'roomCreated') {
+      G.net.isHost = true;
+      G.net.roomCode = data.code;
+      openSub('快速配對', `<p>正在等人加入…房號 ${data.code}</p>
+        <div id="net-slots" style="display:flex;gap:16px;justify-content:center;margin:20px 0;flex-wrap:wrap"></div>
+        <button class="btn" id="btn-invite">複製邀請鏈接</button>
+        <button class="btn primary" id="btn-net-start">開始遊戲</button>`);
+      renderNetSlots();
+      document.getElementById('btn-invite').onclick = () => {
+        const url = location.origin + location.pathname + '?room=' + data.code;
+        navigator.clipboard.writeText(url).then(() => alert('邀請鏈接已複製:\n' + url));
+      };
+      document.getElementById('btn-net-start').onclick = () => startOnlineMatch(false);
+      // 轉發客人訊息
+      ws.onmessage = (e2) => {
+        const d = JSON.parse(e2.data);
+        if (d.t === 'guestJoined') { G.net.remoteBalls[d.wsId] = { name: d.name }; renderNetSlots(); }
+        if (d.t === 'guestLeft') { delete G.net.remoteBalls[d.wsId]; renderNetSlots(); }
+        if (d.t === 'input' && d.fromGuest) G.net.remoteInputs[d.fromGuest] = d.keys;
+        if (d.t === 'dash' && d.fromGuest) {
+          const b = G.balls.find(x => x.remoteId === d.fromGuest);
+          if (b && b.alive) {
+            let ang = Math.atan2(b.vy, b.vx);
+            if (Math.hypot(b.vx,b.vy) < 0.1) ang = Math.random()*Math.PI*2;
+            b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
+          }
+        }
+        if (d.t === 'picked' && d.fromGuest && G.pendingPicks && G.pendingPicks[d.fromGuest]) {
+          const pr = G.pendingPicks[d.fromGuest];
+          const card = CARD_POOL.find(c => c.id === d.cardId) || pr.cards[0];
+          card.apply(pr.ball, G.balls); pr.ball.ownedSkills.push(card.id); pr.ball.recalcStats(); pr.picked = true;
+        }
+        if (d.t === 'mapVote' && d.fromGuest) {
+          G.votes = G.votes || {};
+          G.votes[d.fromGuest] = d.mapId;
+          renderVote();
+        }
+      };
+    }
+  };
+  ws.onerror = () => openSub('錯誤', '<p>連不上伺服器</p>');
+}
 function joinGuestRoom() {
   const code = prompt('輸入房號：');
   if (!code) return;
@@ -1577,6 +1682,26 @@ function joinGuestRoom() {
     if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
     if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
     if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
+    if (data.t === 'mapVoteStart') {
+      G.myVotes = {};
+      openSub('地圖投票', '<h2>選擇地圖</h2><div style="display:flex;gap:20px;justify-content:center;margin-top:20px">' +
+        MAP_THEMES.map(m=>`<div class="vote-map" data-map="${m.id}" style="width:180px;height:120px;background:${m.bg};border:3px solid #444;border-radius:12px;cursor:pointer"><div style="color:#fff;font-weight:bold">${m.name}</div></div>`).join('') +
+        '</div>');
+      document.querySelectorAll('.vote-map').forEach(el => {
+        el.onclick = () => {
+          if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'mapVote', mapId: el.dataset.map }));
+          el.style.borderColor = '#fbbf24';
+        };
+      });
+    }
+    if (data.t === 'mapChosen') {
+      G.mapTheme = MAP_THEMES.find(m=>m.id===data.mapId) || MAP_THEMES[0];
+      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+    }
+    if (data.t === 'mapChosen') {
+      G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
+      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+    }
     if (data.t === 'state') applyRemoteState(data);
     if (data.t === 'drawCards') {
       G.state = 'draw'; G.drawTimer = DRAW_TIME;
@@ -1600,34 +1725,80 @@ function joinGuestRoom() {
   ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
 }
 function startOnlineMatch(teamMode) {
-  // 房主：建立球場，把遠端玩家加成 remote ball
   document.getElementById('sub-overlay').classList.add('hidden');
   document.getElementById('menu-overlay').classList.add('hidden');
   document.getElementById('app').classList.remove('hud-hidden');
   G.lastWinnerId = null;
-  initGame(false);
-  // 把遙控玩家換成真實玩家球（不再是 AI）
-  const pids = Object.keys(G.net.remoteBalls);
-  pids.forEach((pid, i) => {
-    const b = G.balls[i+1];
-    if (b) {
-      b.isPlayer = false;
-      b.isRemote = true;
-      b.remoteId = pid;
-      b.name = G.net.remoteBalls[pid].name;
-    }
-  });
-  G.balls.forEach(b => b.recalcStats());
-  G.balls.forEach(b => b.launch(G.balls.filter(o=>o!==b)));
+  startMapVote();
+}
+function startMapVote() {
+  // 彈出地圖投票，10 秒
+  G.votes = {};
+  G.votes['host'] = MAP_THEMES[Math.floor(Math.random()*MAP_THEMES.length)].id;
+  showVoteUI();
+  // 告訴客人投票
   if (G.net.ws && G.net.ws.readyState === 1) {
-    const indexMap = {};
-    Object.keys(G.net.remoteBalls).forEach(pid => {
-      const idx = G.balls.findIndex(b => b.remoteId === pid);
-      indexMap[G.net.remoteBalls[pid].name] = idx;
-    });
-    G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap }));
+    G.net.ws.send(JSON.stringify({ t:'mapVoteStart' }));
   }
-  startDrawPhase();
+  setTimeout(() => {
+    // 算票
+    const counts = {};
+    Object.values(G.votes).forEach(v => counts[v] = (counts[v]||0)+1);
+    let best = MAP_THEMES[0].id, bestN = -1;
+    Object.entries(counts).forEach(([k,v]) => { if (v>bestN) { bestN=v; best=k; } });
+    G.mapTheme = MAP_THEMES.find(m=>m.id===best) || MAP_THEMES[0];
+    document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+    // 告訴客人結果
+    if (G.net.ws && G.net.ws.readyState === 1) {
+      G.net.ws.send(JSON.stringify({ t:'mapChosen', mapId: best }));
+    }
+    // 真正開始
+    initGame(false, true);
+    const pids = Object.keys(G.net.remoteBalls);
+    pids.forEach((pid, i) => {
+      const b = G.balls[i+1];
+      if (b) {
+        b.isPlayer = false; b.isRemote = true; b.remoteId = pid;
+        b.name = G.net.remoteBalls[pid].name;
+      }
+    });
+    G.balls.forEach(b => b.recalcStats());
+    if (G.net.ws && G.net.ws.readyState === 1) {
+      const indexMap = {};
+      Object.keys(G.net.remoteBalls).forEach(pid => {
+        const idx = G.balls.findIndex(b => b.remoteId === pid);
+        indexMap[G.net.remoteBalls[pid].name] = idx;
+      });
+      G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap }));
+    }
+    startDrawPhase();
+  }, 10000);
+}
+function showVoteUI() {
+  let html = '<div style="text-align:center;margin-top:20px"><h2>選擇地圖（10 秒）</h2><div style="display:flex;gap:20px;justify-content:center;margin-top:20px">';
+  MAP_THEMES.forEach(m => {
+    html += `<div class="vote-map" data-map="${m.id}" style="width:180px;height:120px;background:${m.bg};border:3px solid #444;border-radius:12px;cursor:pointer;position:relative">
+      <div style="position:absolute;bottom:8px;left:0;right:0;color:#fff;font-weight:bold">${m.name}</div>
+      <div class="vote-balls" style="position:absolute;top:8px;left:0;right:0;display:flex;gap:4px;justify-content:center"></div>
+    </div>`;
+  });
+  html += '</div></div>';
+  openSub('地圖投票', html);
+  document.querySelectorAll('.vote-map').forEach(el => {
+    el.onclick = () => {
+      G.votes['host'] = el.dataset.map;
+      renderVote();
+    };
+  });
+  renderVote();
+}
+function renderVote() {
+  document.querySelectorAll('.vote-map').forEach(el => {
+    const id = el.dataset.map;
+    const n = Object.values(G.votes).filter(v=>v===id).length;
+    const balls = el.querySelector('.vote-balls');
+    if (balls) balls.innerHTML = Array(n).fill('<div style="width:14px;height:14px;border-radius:50%;background:#22d3ee"></div>').join('');
+  });
 }
 function hostBroadcast() {
   if (!G.net.isHost || !G.net.ws || G.net.ws.readyState !== 1) return;
@@ -1701,6 +1872,45 @@ window.addEventListener('keydown', e => {
   }
 });
 window.addEventListener('keyup', e => { G.keys[e.key.toLowerCase()] = false; });
+
+// 邀請鏈接：?room=XXXX 自動加入
+(function(){
+  const m = location.search.match(/room=([A-Z0-9]+)/i);
+  if (m) {
+    setTimeout(() => {
+      const code = m[1].toUpperCase();
+      openSub('加入房間', '<p>透過邀請鏈接加入 '+code+' …</p>');
+      G.net.isGuest = true;
+      const ws = new WebSocket(G.WS_URL);
+      G.net.ws = ws;
+      ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code, name: store.playerName || '玩家' }));
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
+        if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
+        if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
+        if (data.t === 'mapChosen') {
+      G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
+      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+    }
+    if (data.t === 'state') applyRemoteState(data);
+        if (data.t === 'drawCards') {
+          G.state = 'draw'; G.drawTimer = DRAW_TIME;
+          document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
+          showDrawCards(data.cards.map(c => ({ id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon, apply:()=>{} })));
+        }
+        if (data.t === 'start') {
+          document.getElementById('sub-overlay').classList.add('hidden');
+          document.getElementById('menu-overlay').classList.add('hidden');
+          document.getElementById('app').classList.remove('hud-hidden');
+          if (!G.balls || G.balls.length === 0) { initGame(false); G.balls.forEach(b=>b.recalcStats()); }
+          G.myIndex = data.myIndex || 0;
+          G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
+        }
+      };
+    }, 300);
+  }
+})();
 
 requestAnimationFrame(loop);
 </script>
