@@ -67,7 +67,7 @@ wss.on('connection', (ws) => {
       const room = rooms[ws.roomCode];
       if (!room || room.host !== ws) return;
       room.guests.forEach((g, guestWs) => {
-        send(guestWs, { t: 'start', myIndex: msg.indexMap[g.name] });
+        send(guestWs, { t: 'start', myIndex: msg.indexMap[g.name], ballStates: msg.ballStates, mapId: msg.mapId });
       });
     }
 
