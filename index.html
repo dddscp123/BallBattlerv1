@@ -667,6 +667,29 @@ const G = {
   dashTime: 0,
 };
 
+function handleGuestStart(data) {
+  if (!data.ballStates || data.ballStates.length === 0) { console.error('start 但 ballStates 為空'); return; }
+  document.getElementById('sub-overlay').classList.add('hidden');
+  document.getElementById('menu-overlay').classList.add('hidden');
+  document.getElementById('app').classList.remove('hud-hidden');
+  // 原子化：先建好所有球再切狀態
+  nextId = 1;
+  G.balls = data.ballStates.map(bd => {
+    const b = new Ball({ name: bd.name, color: bd.color, isPlayer: false });
+    b.x = bd.x; b.y = bd.y; b.hp = bd.hp; b.maxHp = bd.maxHp;
+    b.atk = bd.atk; b.speed = bd.speed; b.alive = true;
+    return b;
+  });
+  if (data.mapId) {
+    const mt = MAP_THEMES.find(m=>m.id===data.mapId);
+    if (mt) { G.mapTheme = mt; document.getElementById('arena-wrap').style.background = mt.bg; }
+  }
+  G.myIndex = data.myIndex || 0;
+  if (G.balls[G.myIndex]) G.balls[G.myIndex].isPlayer = true;
+  G.round = data.round || 1;
+  G.floatTexts = []; G.projectiles = []; G.rocketFx = []; G.turrets = []; G.bombSites = [];
+  G.state = 'draw'; G.drawTimer = DRAW_TIME;
+}
 function initGame(teamMode, keepMap) {
   nextId = 1;
   G.teamMode = false;
@@ -752,34 +775,24 @@ function showDrawCards(cards) {
 }
 function hideDrawCards() { document.getElementById('draw-overlay').classList.add('hidden'); }
 function onCardChosen(card) {
-  const player = G.balls.find(b => b.isPlayer && b.alive);
-  if (!player) return;
-  card.apply(player, G.balls);
-  player.ownedSkills.push(card.id);
-  player.recalcStats();
-  if (!store.seenSkills.includes(card.id)) { store.seenSkills.push(card.id); persist(); }
-  spawnFloat(player.x, player.y - player.radius - 14, card.name, '#fff');
   if (G.net.isGuest) {
-    // 客人：把選擇發給房主
     if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'picked', cardId: card.id }));
-    hideDrawCards();
+    document.querySelector('#draw-overlay .draw-title').textContent = '已選好，等待其他玩家…';
   } else {
-    // 房主：等所有遠端客人選完（或30秒到）才開打
-    waitForRemotePicks().then(() => {
-      hideDrawCards();
-      startBattlePhase();
-    });
+    onHostCardPicked(card);
   }
 }
 function waitForRemotePicks() {
   const pending = Object.values(G.pendingPicks||{}).filter(p=>!p.picked);
   if (pending.length === 0) return Promise.resolve();
   return new Promise(resolve => {
+    let waited = 0;
     const iv = setInterval(() => {
+      waited += 0.2;
       const still = Object.values(G.pendingPicks||{}).filter(p=>!p.picked);
-      if (still.length === 0 || G.drawTimer <= 0) {
+      // 所有人選完、或30秒到、或額外等了8秒，都開打
+      if (still.length === 0 || G.drawTimer <= 0 || waited >= 8) {
         clearInterval(iv);
-        // 沒選的隨機幫他選
         Object.values(G.pendingPicks||{}).forEach(p => {
           if (!p.picked) {
             const c = pick(p.cards);
@@ -794,6 +807,57 @@ function waitForRemotePicks() {
   });
 }
 
+
+// ===== 事件驅動選卡 =====
+function onHostCardPicked(card) {
+  const player = G.balls.find(b=>b.isPlayer && b.alive);
+  if (!player) return;
+  card.apply(player, G.balls);
+  player.ownedSkills.push(card.id);
+  player.recalcStats();
+  if (!store.seenSkills.includes(card.id)) { store.seenSkills.push(card.id); persist(); }
+  G.hostPicked = true;
+  checkAllCardsPicked();
+}
+function onGuestCardPickedRemote(fromGuest, cardId) {
+  if (!G.pendingPicks || !G.pendingPicks[fromGuest]) return;
+  const p = G.pendingPicks[fromGuest];
+  const card = CARD_POOL.find(c=>c.id===cardId) || p.cards[0];
+  card.apply(p.ball, G.balls);
+  p.ball.ownedSkills.push(card.id);
+  p.ball.recalcStats();
+  p.picked = true;
+  checkAllCardsPicked();
+}
+function checkAllCardsPicked() {
+  if (!G.hostPicked) return;
+  const guests = Object.values(G.pendingPicks||{});
+  if (guests.length === 0 || guests.every(p=>p.picked)) {
+    G.hostPicked = false;
+    hideDrawCards();
+    startBattlePhase();
+  }
+}
+function onDrawTimeout() {
+  if (G.state !== 'draw') return;
+  // 房主自己沒選
+  if (!G.hostPicked && document.getElementById('draw-cards').children.length > 0) {
+    const c = pick(G.currentCards);
+    onHostCardPicked(c);
+  }
+  // 客人沒選的自動選
+  Object.values(G.pendingPicks||{}).forEach(p => {
+    if (!p.picked) {
+      const c = pick(p.cards);
+      c.apply(p.ball, G.balls);
+      p.ball.ownedSkills.push(c.id);
+      p.ball.recalcStats();
+      p.picked = true;
+    }
+  });
+  G.hostPicked = true;
+  checkAllCardsPicked();
+}
 // ---------- 戰鬥 ----------
 function startBattlePhase() {
   G.state = 'battle';
@@ -1448,12 +1512,12 @@ function loop(now) {
   const dt = Math.min(0.033,(now-lastT)/1000);
   lastT = now;
   if (G.state==='draw') {
-    if (!G.net.isGuest) G.drawTimer -= dt;
+    if (!G.net.isGuest) {
+      G.drawTimer -= dt;
+      if (G.drawTimer <= 0) onDrawTimeout();
+    }
     const el = document.getElementById('draw-timer');
     if (el) el.textContent = Math.max(0,G.drawTimer).toFixed(1);
-    if (!G.net.isGuest && G.drawTimer <= 0 && document.getElementById('draw-cards').children.length > 0) {
-      onCardChosen(pick(G.currentCards));
-    }
   }
   if (G.state==='battle') {
     if (G.net.isGuest) {
@@ -1469,13 +1533,9 @@ function loop(now) {
         } else { me.vx *= 0.9; me.vy *= 0.9; }
         me.x += me.vx*dt*60; me.y += me.vy*dt*60;
       }
-      // 其他球插值
       G.balls.forEach((b,i) => {
         if (i === G.myIndex || !b.alive) return;
-        if (b._tx !== undefined) {
-          b.x += (b._tx - b.x) * 0.25;
-          b.y += (b._ty - b.y) * 0.25;
-        }
+        if (b._tx !== undefined) { b.x += (b._tx-b.x)*0.3; b.y += (b._ty-b.y)*0.3; }
       });
     } else {
       stepPhysics(dt);
@@ -1512,21 +1572,7 @@ function loop(now) {
           document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
           showDrawCards(data.cards.map(c => ({ id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon, apply:()=>{} })));
         }
-        if (data.t === 'start') {
-          document.getElementById('sub-overlay').classList.add('hidden');
-          document.getElementById('menu-overlay').classList.add('hidden');
-          document.getElementById('app').classList.remove('hud-hidden');
-          nextId = 1;
-          G.balls = (data.ballStates||[]).map((bd,i) => {
-            const b = new Ball({ name: bd.name, color: bd.color, isPlayer: false });
-            b.x = bd.x; b.y = bd.y; b.hp = bd.hp; b.maxHp = bd.maxHp;
-            b.atk = bd.atk; b.speed = bd.speed; b.alive = true;
-            return b;
-          });
-          G.myIndex = data.myIndex || 0;
-          if (G.balls[G.myIndex]) G.balls[G.myIndex].isPlayer = true;
-          G.state = 'draw'; G.drawTimer = DRAW_TIME;
-        }
+        if (data.t === 'start') handleGuestStart(data);
       };
     }, 300);
   }
@@ -1623,12 +1669,7 @@ function createHostRoom() {
         b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
       }
     }
-    if (data.t === 'picked' && data.fromGuest && G.pendingPicks && G.pendingPicks[data.fromGuest]) {
-      const p = G.pendingPicks[data.fromGuest];
-      const card = CARD_POOL.find(c => c.id === data.cardId) || p.cards[0];
-      card.apply(p.ball, G.balls);
-      p.ball.ownedSkills.push(card.id); p.ball.recalcStats(); p.picked = true;
-    }
+    if (data.t === 'picked' && data.fromGuest) onGuestCardPickedRemote(data.fromGuest, data.cardId);
   };
   ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
 }
@@ -1666,11 +1707,7 @@ function quickMatch() {
             b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
           }
         }
-        if (d.t === 'picked' && d.fromGuest && G.pendingPicks && G.pendingPicks[d.fromGuest]) {
-          const pr = G.pendingPicks[d.fromGuest];
-          const card = CARD_POOL.find(c => c.id === d.cardId) || pr.cards[0];
-          card.apply(pr.ball, G.balls); pr.ball.ownedSkills.push(card.id); pr.ball.recalcStats(); pr.picked = true;
-        }
+        if (d.t === 'picked' && d.fromGuest) onGuestCardPickedRemote(d.fromGuest, d.cardId);
         if (d.t === 'mapVote' && d.fromGuest) {
           G.votes = G.votes || {};
           G.votes[d.fromGuest] = d.mapId;
@@ -1856,33 +1893,29 @@ function hostBroadcast() {
   G.net.ws.send(JSON.stringify(payload));
 }
 function applyRemoteState(data) {
-  // 客人：用房主狀態覆蓋本地球
-  if (!G.balls || G.balls.length === 0) {
-    // 初始化一個空場
-    initGame(false);
-  }
+  if (!G.balls || G.balls.length === 0) return;
   data.balls.forEach((bd, i) => {
-    if (G.balls[i]) {
-      if (i !== G.myIndex) {
-        G.balls[i]._tx = bd.x; G.balls[i]._ty = bd.y;
-      }
-      G.balls[i].hp = bd.hp; G.balls[i].maxHp = bd.maxHp;
-      G.balls[i].alive = bd.alive;
-      G.balls[i].name = bd.name;
-      G.balls[i].color = bd.color;
-      G.balls[i].atk = bd.atk || 1;
-      G.balls[i].speed = bd.spd || 2;
+    const lb = G.balls[i];
+    if (!lb) return;
+    if (i === G.myIndex) {
+      // 自己的球：偏差大才硬拉，小偏差 lerp
+      const d = Math.hypot(bd.x-lb.x, bd.y-lb.y);
+      if (d > 100) { lb.x = bd.x; lb.y = bd.y; }
+      else { lb.x += (bd.x-lb.x)*0.15; lb.y += (bd.y-lb.y)*0.15; }
+    } else {
+      // 其他球：存目標位置，loop 裡 lerp
+      lb._tx = bd.x; lb._ty = bd.y;
     }
+    lb.hp = bd.hp; lb.maxHp = bd.maxHp;
+    lb.alive = bd.alive; lb.name = bd.name; lb.color = bd.color;
+    lb.atk = bd.atk || 1; lb.speed = bd.spd || 2;
   });
   if (data.drawTimer !== undefined) G.drawTimer = data.drawTimer;
   if (data.state) {
-    if (data.state === 'battle' && G.state === 'draw') {
-      hideDrawCards();
-    }
+    if (data.state === 'battle' && G.state === 'draw') hideDrawCards();
     G.state = data.state;
   }
   if (G.circle) { G.circle.r = data.circleR; G.circle.timer = data.circleTimer; }
-  G.state = data.state;
   G.round = data.round;
 }
 // 客人：發送輸入
