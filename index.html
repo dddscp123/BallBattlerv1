@@ -1731,6 +1731,7 @@ function joinGuestRoom() {
   ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code.toUpperCase(), name: store.playerName || '玩家' }));
   ws.onmessage = (e) => {
     const data = JSON.parse(e.data);
+    if (G.net.isGuest) console.log('[客人收到]', data.t, data);
     if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
     if (data.t === 'joined') { G.net.guestId = data.yourId; openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>'); }
     if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
