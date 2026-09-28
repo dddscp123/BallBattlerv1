@@ -1682,6 +1682,9 @@ function applyRemoteState(data) {
       G.balls[i].alive = bd.alive;
       G.balls[i].name = bd.name;
       G.balls[i].color = bd.color;
+      G.balls[i].atk = bd.atk || 1;
+      G.balls[i].speed = bd.spd || 2;
+      if (!G.balls[i]._recalcOnce) { G.balls[i].recalcStats(); G.balls[i]._recalcOnce = true; }
     }
   });
   G.firstStateApplied = true;
