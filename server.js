@@ -66,8 +66,12 @@ wss.on('connection', (ws) => {
     else if (msg.t === 'hostStart') {
       const room = rooms[ws.roomCode];
       if (!room || room.host !== ws) return;
+      // 伺服器隨機分配地圖
+      const maps = ['original','grass','hell','cyber'];
+      const mapId = maps[Math.floor(Math.random()*maps.length)];
+      send(room.host, { t:'mapChosen', mapId });
       room.guests.forEach((g, guestWs) => {
-        send(guestWs, { t: 'start', myIndex: msg.indexMap[g.name], ballStates: msg.ballStates, mapId: msg.mapId });
+        send(guestWs, { t: 'start', myIndex: msg.indexMap[g.name], ballStates: msg.ballStates, mapId });
       });
     }
 
