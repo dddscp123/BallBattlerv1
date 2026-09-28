@@ -10,7 +10,7 @@
     --bg: #0b0f14; --panel: #141a22; --panel-2: #1c2530;
     --line: #2a3442; --text: #e6edf3; --dim: #8b98a8;
     --player: #22d3ee; --gold: #fbbf24;
-    --r-common: #e5e7eb; --r-rare: #7dd3fc; --r-epic: #c084fc; --r-legendary: #fbbf24; --r-divine: #ffffff;
+    --r-common: #e5e7eb; --r-rare: #7dd3fc; --r-epic: #c084fc; --r-legendary: #fbbf24; --r-divine: #c084fc;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -121,16 +121,16 @@
   .card.r-rare { border-color: var(--r-rare); box-shadow: 0 0 12px rgba(125,211,252,0.25); }
   .card.r-epic { border-color: var(--r-epic); box-shadow: 0 0 14px rgba(192,132,252,0.35); }
   .card.r-legendary { border-color: var(--r-legendary); box-shadow: 0 0 16px rgba(251,191,36,0.45); }
-  .card.r-divine { border-color:#fff; background:#000; box-shadow:0 0 18px rgba(255,255,255,0.5); color:#fff; }
-  .card.r-divine .art { background:#000; }
-  .card.r-divine .desc { color:#bbb; }
+  .card.r-divine { border-color:#a855f7; background:linear-gradient(135deg,#2e1065,#581c87 55%,#7e22ce); box-shadow:0 0 18px rgba(168,85,247,0.6); color:#f3e8ff; }
+  .card.r-divine .art { background:#2e1065; }
+  .card.r-divine .desc { color:#e9d5ff; }
   .rarity-tag.r-common { background: var(--r-common); color: #000; }
   .rarity-tag.r-rare { background: var(--r-rare); color: #000; }
   .rarity-tag.r-epic { background: var(--r-epic); color: #000; }
   .rarity-tag.r-legendary { background: var(--r-legendary); color: #000; }
-  .rarity-tag.r-divine { background: #000; color: #fff; border:1px solid #fff; }
-  .dex-item.dex-divine { background:#fff !important; border:3px solid #000 !important; color:#000; }
-  .dex-item.dex-divine .art { background:#fff; }
+  .rarity-tag.r-divine { background:#9333ea; color:#fff; border:1px solid #a855f7; }
+  .dex-item.dex-divine { background:linear-gradient(135deg,#2e1065,#7e22ce) !important; border:3px solid #a855f7 !important; color:#f3e8ff; }
+  .dex-item.dex-divine .art { background:#2e1065; }
 
   #player-panel {
     display: flex; align-items: center; gap: 14px;
@@ -448,28 +448,28 @@ const CARD_POOL = [
   { id:'r_bomb', name:'恐怖襲擊', rarity:'rare', img:'assets/terror-attack.png',
     desc:'技能：自爆。每 12 秒自扣 2 血，大範圍對手扣 5 血',
     apply: b => { b.hasBomb = true; b.bombTimer = 12; } },
-  { id:'r_atk',  name:'力量強化+', rarity:'rare', icon:'▲', desc:'技能：重擊。攻擊力永久 +2',
+  { id:'r_atk',  name:'力量強化II', rarity:'rare', icon:'▲', desc:'技能：重擊。攻擊力永久 +2',
     apply: b => { b.permAtkBonus += 2; } },
-  { id:'r_spd',  name:'迅捷+', rarity:'rare', icon:'»', desc:'移速 +10%',
+  { id:'r_spd',  name:'迅捷II', rarity:'rare', icon:'»', desc:'移速 +10%',
     apply: b => { b.permSpeedMult *= 1.10; } },
   { id:'r_heal', name:'大血包', rarity:'rare', icon:'+', desc:'技能：包紮。立刻回復 5 HP',
     apply: b => { b.hp = Math.min(b.maxHp, b.hp + 5); } },
-  { id:'r_hpmax',name:'強化心臟+', rarity:'rare', icon:'♥', desc:'生命上限 +5',
+  { id:'r_hpmax',name:'強化心臟II', rarity:'rare', icon:'♥', desc:'生命上限 +5',
     apply: b => { b.maxHp += 5; b.hp += 5; } },
   { id:'r_smoker', name:'吸煙者', rarity:'rare', img:'assets/smoker.png',
-    desc:'每 15 秒自扣 5 血，3 秒內留下煙霧，碰到煙霧的對手攻擊 -2',
+    desc:'有害健康：每15秒扣5血，3秒內留下煙霧，碰到煙霧的對手扣2滴血',
     apply: b => { b.isSmoker = true; b.smokerTimer = 15; b.smokeTime = 0; } },
   { id:'r_mobster', name:'黑手哥', rarity:'rare', img:'assets/mobster.png',
-    desc:'選擇後立即對所有對手造成 3 點傷害',
+    desc:'口出狂言：選擇後立即對所有對手造成 3 點傷害',
     apply: (b, all) => { all.forEach(o => { if (o!==b && o.alive){ o.hp-=3; spawnFloat(o.x,o.y,'-3','#ef4444'); } }); } },
   { id:'r_roadblock', name:'落魄的路障人', rarity:'rare', img:'assets/roadblock.png',
-    desc:'第一次被打後 10 秒內攻擊 +10、移速 +15%（只觸發一次）',
+    desc:'憤怒！：第一次被打後 10 秒內攻擊 +10、移速 +15%（只觸發一次）',
     apply: b => { b.hasRage = true; b.rageTriggered = false; b.rageTimer = 0; } },
   { id:'r_raptor', name:'速龍', rarity:'rare', img:'assets/raptor.png',
-    desc:'技能：警隊大佬。每次被打後 5 秒內移速 +20%',
+    desc:'警隊大佬：每次被打後移速+20%持續5秒',
     apply: b => { b.hasHaste = true; b.hasteTimer = 0; } },
   { id:'r_inverse', name:'逆命', rarity:'rare', img:'assets/inverse.png',
-    desc:'隨機擊暈一名玩家 5 秒（包括自己）',
+    desc:'沒有黃牌：隨機擊暈一名玩家 5 秒（包括自己）',
     apply: (b, all) => {
       const t = all.filter(o=>o.alive);
       const v = t[Math.floor(Math.random()*t.length)];
@@ -478,7 +478,7 @@ const CARD_POOL = [
     } },
   // 史詩
   { id:'e_fool', name:'鄉里愚人', rarity:'epic', img:'assets/fool.png',
-    desc:'清理作業：隨機對 2 名對手造成 5 點傷害',
+    desc:'清理作業：隨機對2名對手造成5點傷害',
     apply: (b, all) => {
       const enemies = all.filter(o=>o!==b && o.alive);
       for (let i=0;i<2 && enemies.length;i++) {
@@ -489,10 +489,10 @@ const CARD_POOL = [
       }
     } },
   { id:'e_hawk', name:'飛鷹', rarity:'epic', img:'assets/hawk.png',
-    desc:'技能：高速離場。永久移速 +20%',
+    desc:'高速離場：永久移速 +20%',
     apply: b => { b.permSpeedMult *= 1.20; } },
   { id:'e_turret', name:'簡易砲台', rarity:'epic', img:'assets/turret.png',
-    desc:'在腳下放一座砲台，15 秒內每 3 秒對 130 範圍內敵人造成 1 傷',
+    desc:'人工組裝：在腳下放一座砲台，15秒內每2秒對130範圍內敵人造成2傷',
     apply: b => {
       G.turrets.push({ x:b.x, y:b.y, color:b.color, life:15, tick:2, ownerId:b.id });
     } },
@@ -500,44 +500,44 @@ const CARD_POOL = [
     desc:'死亡解藥：血上限 +10，每 10 秒回復 2 血',
     apply: b => { b.maxHp += 10; b.hp += 10; b.hasPlague = true; b.plagueTimer = 10; } },
   { id:'e_rocket', name:'火箭跳', rarity:'epic', img:'assets/rocket.png',
-    desc:'技能：火箭兵專用。每 15 秒自己飛向隨機位置：自扣 3 血，落地 100 範圍 10 傷',
+    desc:'火箭兵專用：每 15 秒火箭跳向隨機位置：扣3滴血，落地100範圍内的對手扣10滴血',
     apply: b => { b.hasRocket = true; b.rocketTimer = 15; } },
   // 傳奇
   { id:'l_judge', name:'空中執法', rarity:'legendary', img:'assets/judge.png',
-    desc:'每 15 秒隨機衝向一名對手：5 傷害、擊退、3 秒內對手移速 -20%',
+    desc:'美國警察：每15秒隨機衝向一名對手造成5傷害、擊退、3秒內對手移速 -20%',
     apply: b => { b.hasJudge = true; b.judgeTimer = 10; } },
   { id:'l_revive', name:'扣一復活老大', rarity:'legendary', img:'assets/revive.png',
-    desc:'技能：復活。死亡後自動復活回滿血，接下來 5 秒攻擊 +3',
+    desc:'111111：死亡後自動復活回滿血，接下來 5 秒攻擊 +3',
     apply: b => { b.canRevive = true; b.reviveUsed = false; } },
   { id:'e_soul', name:'靈魂收割', rarity:'epic', img:'assets/soul.png',
-    desc:'擊殺對手後回 5 血並 +5 血上限',
+    desc:'美味：擊殺對手後回5血並 +5血上限',
     apply: b => { b.hasSoul = true; } },
   { id:'l_wither', name:'凋零怪', rarity:'legendary', img:'assets/wither.png',
-    desc:'每 10 秒向三個方向射出凋零頭，命中造成 7 傷',
+    desc:'爆炸攻擊：每 10 秒向三個方向射出凋零頭，命中造成 7 傷',
     apply: b => { b.hasWither = true; b.witherTimer = 10; } },
   // 神級
   { id:'d_heli', name:'俄羅斯直升機', rarity:'divine', img:'assets/helicopter.png',
-    desc:'技能：混沌寄生。每回合開始隨機 3 個紅圈，2 秒後爆炸，站進去直接死',
+    desc:'混沌寄生：每回合開始隨機轟炸3個紅圈，2秒後爆炸，站進去直接死',
     apply: b => { b.hasHelicopter = true; } },
   { id:'d_monk', name:'破戒僧', rarity:'divine', img:'assets/monk.png',
-    desc:'技能：忍無可忍。血量 ≤3 時自動開 10 秒霸體，並對全場對手造成 5 傷',
+    desc:'忍無可忍：血量 ≤3 時自動開 10 秒霸體，並對全場對手造成 5 傷',
     apply: b => { b.hasMonk = true; b.monkTriggered = false; } },
   // 補充史詩
   { id:'e_tank', name:'羅布樂思戰車', rarity:'epic', img:'assets/tank.png',
-    desc:'技能：毀滅衝鋒。每 10 秒隨方向衝 1 秒，撞到的人 3 傷並減速 25% 持續 5 秒',
+    desc:'毀滅衝鋒：每 10 秒隨方向衝 1 秒，撞到的人 3 傷並減速 25% 持續 5 秒',
     apply: b => { b.hasTank = true; b.tankTimer = 10; b.tankCharge = 0; b.tankTrail = []; } },
   // 補充傳奇
   { id:'l_ghost', name:'血港鬼影', rarity:'legendary', img:'assets/ghost.png',
-    desc:'血量低於 5 時開 5 秒水下：移速 +20%、免疫傷害且無法攻擊，80 藍圈內敵人每秒 -2',
+    desc:'你看的見我嗎：血量低於5時開啓水下狀態5秒：移速+20%、免疫傷害但無法攻擊，80藍圈內敵人每秒-2血',
     apply: b => { b.hasGhost = true; b.ghostTimer = 0; } },
   { id:'e_paralyze', name:'癱瘓', rarity:'epic', img:'assets/paralyze.png',
-    desc:'技能：沉默。選擇後停用全部玩家技能 5 秒',
+    desc:'沉默：選擇後停用全部玩家技能 5 秒',
     apply: () => { G.paralysisTimer = 5; spawnFloat(W/2, H/2, '全場技能封印 5 秒!', '#a855f7'); } },
   { id:'l_beast', name:'天水圍墮天地獄獸', rarity:'legendary', img:'assets/beast.png',
-    desc:'技能：捲土重來。血量低於 5 後開 3 秒狂暴：攻擊 +10、移速 +30%',
+    desc:'捲土重來：血量低於5後開3秒狂暴：攻擊+10、移速+30%',
     apply: b => { b.hasBeast = true; b.beastTriggered = false; } },
   { id:'d_judge2', name:'審判之斬', rarity:'divine', img:'assets/judge-slash.png',
-    desc:'技能：破界。發射多條藍紫色細線持續 3 秒，碰到的對手扣 3 血',
+    desc:'破界：發射多條藍紫色細線持續 3 秒，碰到的對手扣3血',
     apply: b => { b.hasJudgment = true; b.judgeTimer = 3; b.judgeLines = []; } },
 ];
 
@@ -837,10 +837,10 @@ function startDrawPhase() {
   document.getElementById('phase-tag').className = 'phase-tag draw';
   const player = G.balls.find(b=>b.isPlayer);
   if (player.id === G.lastWinnerId) {
-    document.querySelector('#draw-overlay .draw-title').textContent = '上輪勝者，跳過抽卡…';
+    document.querySelector('#draw-overlay .draw-title').textContent = '上輪勝者，跳過抽卡，等待對手選卡…';
     document.getElementById('draw-cards').innerHTML = '';
     document.getElementById('draw-overlay').classList.remove('hidden');
-    setTimeout(() => { if (G.state==='draw') startBattlePhase(); }, 1200);
+    G.hostPicked = true;
   } else {
     document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
     showDrawCards(rollCards(3));
@@ -851,10 +851,14 @@ function startDrawPhase() {
     Object.keys(G.net.remoteBalls).forEach(pid => {
       const ball = G.balls.find(b => b.remoteId === pid);
       if (!ball) return;
-      const cards = rollCards(3);
-      G.pendingPicks[pid] = { ball, cards, picked:false };
-      // 廣播給所有人，客人用 myPid 過濾
-      G.net.ws.send(JSON.stringify({ t:'drawCards', forPid: pid, cards: cards.map(c=>({id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon})) }));
+      if (ball.id === G.lastWinnerId) {
+        G.pendingPicks[pid] = { ball, cards:[], picked:true };
+        G.net.ws.send(JSON.stringify({ t:'drawSkip', forPid: pid }));
+      } else {
+        const cards = rollCards(3);
+        G.pendingPicks[pid] = { ball, cards, picked:false };
+        G.net.ws.send(JSON.stringify({ t:'drawCards', forPid: pid, cards: cards.map(c=>({id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon})) }));
+      }
     });
   }
   updateHUD();
@@ -1717,31 +1721,7 @@ function loop(now) {
       const ws = new WebSocket(G.WS_URL);
       G.net.ws = ws;
       ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code, name: store.playerName || '玩家' }));
-      ws.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
-        if (data.t === 'joined') { G.net.guestId = data.yourId; openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>'); }
-        if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
-        if (data.t === 'mapChosen') {
-      G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
-      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
-    }
-    if (data.t === 'fx' && data.fx) {
-      const f = data.fx;
-      for(let i=0;i<f.count;i++){
-        const ang=Math.random()*Math.PI*2, sp=Math.random()*(f.opt.sp||3)+0.5;
-        G.particles.push({x:f.x,y:f.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
-          color:f.color,r:Math.random()*(f.opt.r||3)+1.5,life:1,decay:Math.random()*0.03+0.02});
-      }
-    }
-    if (data.t === 'state') applyRemoteState(data);
-        if (data.t === 'drawCards') {
-          G.state = 'draw'; G.drawTimer = DRAW_TIME;
-          document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
-          showDrawCards(data.cards.map(c => ({ id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon, apply:()=>{} })));
-        }
-        if (data.t === 'start') handleGuestStart(data);
-      };
+      ws.onmessage = (e) => guestOnMessage(JSON.parse(e.data));
     }, 300);
   }
 })();
@@ -1820,161 +1800,7 @@ function createHostRoom() {
   const ws = new WebSocket(G.WS_URL);
   G.net.ws = ws;
   ws.onopen = () => ws.send(JSON.stringify({ t:'createRoom' }));
-  ws.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    if (data.t === 'roomCreated') {
-      G.net.roomCode = data.code;
-      openSub('創建房間', `<p>房號：<b style="font-size:24px;color:#fbbf24;letter-spacing:4px">${data.code}</b></p>
-        <div id="net-slots" style="display:flex;gap:16px;justify-content:center;margin:20px 0;flex-wrap:wrap"></div>
-        <button class="btn" id="btn-invite">複製邀請鏈接</button>
-        <button class="btn primary" id="btn-net-start">開始遊戲</button>`);
-      renderNetSlots();
-      document.getElementById('btn-invite').onclick = () => {
-        const url = location.origin + location.pathname + '?room=' + data.code;
-        navigator.clipboard.writeText(url).then(() => alert('邀請鏈接已複製:\n' + url));
-      };
-      document.getElementById('btn-net-start').onclick = () => startOnlineMatch(true);
-    }
-    if (data.t === 'guestJoined') {
-      G.net.remoteBalls[data.wsId] = { name: data.name };
-      renderNetSlots();
-    }
-    if (data.t === 'guestLeft') { delete G.net.remoteBalls[data.wsId]; renderNetSlots(); }
-    if (data.t === 'input' && data.fromGuest) G.net.remoteInputs[data.fromGuest] = data.keys;
-    if (data.t === 'dash' && data.fromGuest) {
-      const b = G.balls.find(x => x.remoteId === data.fromGuest);
-      if (b && b.alive) {
-        let ang = Math.atan2(b.vy, b.vx);
-        if (Math.hypot(b.vx,b.vy) < 0.1) ang = Math.random()*Math.PI*2;
-        b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
-      }
-    }
-    if (data.t === 'picked' && data.fromGuest) onGuestCardPickedRemote(data.fromGuest, data.cardId);
-  };
-  ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
-}
-function quickMatch() {
-  // 嘗試加入 quick 房，失敗就創一個
-  const ws = new WebSocket(G.WS_URL);
-  G.net.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t:'createRoom' }));
-  ws.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    if (data.t === 'roomCreated') {
-      G.net.isHost = true;
-      G.net.roomCode = data.code;
-      openSub('快速配對', `<p>正在等人加入…房號 ${data.code}</p>
-        <div id="net-slots" style="display:flex;gap:16px;justify-content:center;margin:20px 0;flex-wrap:wrap"></div>
-        <button class="btn" id="btn-invite">複製邀請鏈接</button>
-        <button class="btn primary" id="btn-net-start">開始遊戲</button>`);
-      renderNetSlots();
-      document.getElementById('btn-invite').onclick = () => {
-        const url = location.origin + location.pathname + '?room=' + data.code;
-        navigator.clipboard.writeText(url).then(() => alert('邀請鏈接已複製:\n' + url));
-      };
-      document.getElementById('btn-net-start').onclick = () => startOnlineMatch(false);
-      // 轉發客人訊息
-      ws.onmessage = (e2) => {
-        const d = JSON.parse(e2.data);
-        if (d.t === 'guestJoined') { G.net.remoteBalls[d.wsId] = { name: d.name }; renderNetSlots(); }
-        if (d.t === 'guestLeft') { delete G.net.remoteBalls[d.wsId]; renderNetSlots(); }
-        if (d.t === 'input' && d.fromGuest) G.net.remoteInputs[d.fromGuest] = d.keys;
-        if (d.t === 'dash' && d.fromGuest) {
-          const b = G.balls.find(x => x.remoteId === d.fromGuest);
-          if (b && b.alive) {
-            let ang = Math.atan2(b.vy, b.vx);
-            if (Math.hypot(b.vx,b.vy) < 0.1) ang = Math.random()*Math.PI*2;
-            b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
-          }
-        }
-        if (d.t === 'picked' && d.fromGuest) onGuestCardPickedRemote(d.fromGuest, d.cardId);
-        if (d.t === 'mapVote' && d.fromGuest) {
-          G.votes = G.votes || {};
-          G.votes[d.fromGuest] = d.mapId;
-          renderVote();
-        }
-      };
-    }
-  };
-  ws.onerror = () => openSub('錯誤', '<p>連不上伺服器</p>');
-}
-function joinGuestRoom() {
-  const code = prompt('輸入房號：');
-  if (!code) return;
-  G.net.isGuest = true;
-  const ws = new WebSocket(G.WS_URL);
-  G.net.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code.toUpperCase(), name: store.playerName || '玩家' }));
-  ws.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    if (G.net.isGuest) console.log('[客人收到]', data.t, data);
-    if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
-    if (data.t === 'joined') { G.net.guestId = data.yourId; openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>'); }
-    if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
-    if (data.t === 'mapVoteStart') {
-      G.myVotes = {};
-      openSub('地圖投票', '<h2>選擇地圖</h2><div style="display:flex;gap:20px;justify-content:center;margin-top:20px">' +
-        MAP_THEMES.map(m=>`<div class="vote-map" data-map="${m.id}" style="width:180px;height:120px;background:${m.bg};border:3px solid #444;border-radius:12px;cursor:pointer"><div style="color:#fff;font-weight:bold">${m.name}</div></div>`).join('') +
-        '</div>');
-      document.querySelectorAll('.vote-map').forEach(el => {
-        el.onclick = () => {
-          if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'mapVote', mapId: el.dataset.map }));
-          el.style.borderColor = '#fbbf24';
-        };
-      });
-    }
-    if (data.t === 'mapChosen') {
-      G.mapTheme = MAP_THEMES.find(m=>m.id===data.mapId) || MAP_THEMES[0];
-      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
-    }
-    if (data.t === 'mapChosen') {
-      G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
-      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
-    }
-    if (data.t === 'fx' && data.fx) {
-      const f = data.fx;
-      for(let i=0;i<f.count;i++){
-        const ang=Math.random()*Math.PI*2, sp=Math.random()*(f.opt.sp||3)+0.5;
-        G.particles.push({x:f.x,y:f.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
-          color:f.color,r:Math.random()*(f.opt.r||3)+1.5,life:1,decay:Math.random()*0.03+0.02});
-      }
-    }
-    if (data.t === 'state') applyRemoteState(data);
-    if (data.t === 'drawCards') {
-      // 只處理給自己的牌
-      if (G.net.guestId && data.forPid && data.forPid !== G.net.guestId) return;
-      G.state = 'draw'; G.drawTimer = DRAW_TIME;
-      document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
-      showDrawCards(data.cards.map(c => ({
-        id: c.id, name: c.name, desc: c.desc, rarity: c.rarity,
-        img: c.img, icon: c.icon, apply: ()=>{}
-      })));
-    }
-    if (data.t === 'start') {
-      document.getElementById('sub-overlay').classList.add('hidden');
-      document.getElementById('menu-overlay').classList.add('hidden');
-      document.getElementById('app').classList.remove('hud-hidden');
-      initGame(false);
-      if (data.ballStates) {
-        data.ballStates.forEach((bd, i) => {
-          if (G.balls[i]) {
-            G.balls[i].name = bd.name; G.balls[i].color = bd.color;
-            G.balls[i].x = bd.x; G.balls[i].y = bd.y;
-            G.balls[i].hp = bd.hp; G.balls[i].maxHp = bd.maxHp;
-            G.balls[i].atk = bd.atk; G.balls[i].speed = bd.speed;
-            G.balls[i].alive = true;
-          }
-        });
-      }
-      if (data.mapId) {
-        const mt = MAP_THEMES.find(m=>m.id===data.mapId);
-        if (mt) { G.mapTheme = mt; document.getElementById('arena-wrap').style.background = mt.bg; }
-      }
-      G.myIndex = data.myIndex || 0;
-      G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
-      G.state = 'draw'; G.drawTimer = DRAW_TIME;
-    }
-  };
+  ws.onmessage = (e) => guestOnMessage(JSON.parse(e.data));
   ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，先打開 https://ballbattlerv1.onrender.com/ 等 30 秒再試。</p>');
 }
 function startOnlineMatch(teamMode) {
@@ -2122,8 +1948,8 @@ setInterval(() => {
   if (G.net.isGuest && G.net.ws && G.net.ws.readyState === 1) {
     G.net.ws.send(JSON.stringify({ t:'input', keys: {...G.keys} }));
   }
-  if (G.net.isHost) hostBroadcast();
-}, 50);
+}, 33);
+setInterval(() => { if (G.net.isHost) hostBroadcast(); }, 50);
 
 document.getElementById('btn-restart').onclick = () => {
   document.getElementById('end-overlay').classList.add('hidden');
@@ -2154,52 +1980,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { G.keys[e.key.toLowerCase()] = false; });
 window.addEventListener('blur', () => { G.keys = {}; });
 
-// 邀請鏈接：?room=XXXX 自動加入
-(function(){
-  const m = location.search.match(/room=([A-Z0-9]+)/i);
-  if (m) {
-    setTimeout(() => {
-      const code = m[1].toUpperCase();
-      openSub('加入房間', '<p>透過邀請鏈接加入 '+code+' …</p>');
-      G.net.isGuest = true;
-      const ws = new WebSocket(G.WS_URL);
-      G.net.ws = ws;
-      ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code, name: store.playerName || '玩家' }));
-      ws.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
-        if (data.t === 'joined') { G.net.guestId = data.yourId; openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>'); }
-        if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
-        if (data.t === 'mapChosen') {
-      G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
-      document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
-    }
-    if (data.t === 'fx' && data.fx) {
-      const f = data.fx;
-      for(let i=0;i<f.count;i++){
-        const ang=Math.random()*Math.PI*2, sp=Math.random()*(f.opt.sp||3)+0.5;
-        G.particles.push({x:f.x,y:f.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
-          color:f.color,r:Math.random()*(f.opt.r||3)+1.5,life:1,decay:Math.random()*0.03+0.02});
-      }
-    }
-    if (data.t === 'state') applyRemoteState(data);
-        if (data.t === 'drawCards') {
-          G.state = 'draw'; G.drawTimer = DRAW_TIME;
-          document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
-          showDrawCards(data.cards.map(c => ({ id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon, apply:()=>{} })));
-        }
-        if (data.t === 'start') {
-          document.getElementById('sub-overlay').classList.add('hidden');
-          document.getElementById('menu-overlay').classList.add('hidden');
-          document.getElementById('app').classList.remove('hud-hidden');
-          if (!G.balls || G.balls.length === 0) { initGame(false); G.balls.forEach(b=>b.recalcStats()); }
-          G.myIndex = data.myIndex || 0;
-          G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
-        }
-      };
-    }, 300);
-  }
-})();
+
 
 requestAnimationFrame(loop);
 </script>
