@@ -572,7 +572,7 @@ class Ball {
       if(this.y+this.radius>dy2){this.y=dy2-this.radius;this.vy=-Math.abs(this.vy);}
     }
     // 歸一化速度到 this.speed（防止碰撞後越打越快），玩家/衝鋒/暈眩時不歸一化
-    if (!this.isPlayer && this.stunTimer <= 0 && this.chargeTimer <= 0 && G.dashTime <= 0) {
+    if (!this.isPlayer && !this.isRemote && this.stunTimer <= 0 && this.chargeTimer <= 0 && G.dashTime <= 0) {
       const mag = Math.hypot(this.vx, this.vy);
       if (mag > 0.01) {
         this.vx = this.vx/mag*this.speed;
