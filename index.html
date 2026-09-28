@@ -229,7 +229,6 @@
       <p>15 滴血開局，活到最後得 1 勝點，先到 3 勝點奪冠。每 45 秒縮圈。<br>操作：WASD 移動，Shift 衝刺撞人。</p>
       <div class="menu-btns">
         <button class="btn primary" id="btn-solo">人機對局</button>
-        <button class="btn" id="btn-quick">快速配對</button>
         <button class="btn" id="btn-create">創建房間</button>
         <button class="btn" id="btn-join">加入房間</button>
       </div>
@@ -751,8 +750,9 @@ function showDrawCards(cards) {
     el.onclick = () => {
       if (G.cardLocked) return;
       G.cardLocked = true;
-      document.querySelectorAll('#draw-cards .card').forEach(c => c.classList.add('disabled'));
-      onCardChosen(card);
+      el.style.transform = 'scale(1.15)';
+      document.querySelectorAll('#draw-cards .card').forEach(c => { if (c !== el) c.classList.add('disabled'); });
+      setTimeout(() => onCardChosen(card), 200);
     };
     wrap.appendChild(el);
   });
@@ -1568,7 +1568,6 @@ function startMatch(teamMode) {
   G.balls.forEach(b => b.launch(G.balls.filter(o=>o!==b)));
   startDrawPhase();
 }
-document.getElementById('btn-quick').onclick = quickMatch;
 document.getElementById('btn-create').onclick = createHostRoom;
 document.getElementById('btn-join').onclick = joinGuestRoom;
 // ---------- 聯機 (PeerJS P2P) ----------
@@ -1799,6 +1798,21 @@ function renderVote() {
     const balls = el.querySelector('.vote-balls');
     if (balls) balls.innerHTML = Array(n).fill('<div style="width:14px;height:14px;border-radius:50%;background:#22d3ee"></div>').join('');
   });
+}
+function renderNetSlots() {
+  const el = document.getElementById('net-slots');
+  if (!el) return;
+  const slots = 6;
+  const players = [{name: store.playerName||'玩家', color:'#22d3ee'}, ...Object.values(G.net.remoteBalls).map(b=>({name:b.name, color:'#ef4444'}))];
+  let html = '';
+  for (let i=0;i<slots;i++) {
+    if (players[i]) {
+      html += `<div style="text-align:center"><div style="width:60px;height:60px;border-radius:50%;background:${players[i].color};margin:0 auto;border:3px solid #fff"></div><div style="font-size:12px;margin-top:4px">${players[i].name}</div></div>`;
+    } else {
+      html += `<div style="text-align:center"><div style="width:60px;height:60px;border-radius:50%;border:3px dashed #555;margin:0 auto"></div><div style="font-size:12px;margin-top:4px;color:#666">空</div></div>`;
+    }
+  }
+  el.innerHTML = html;
 }
 function hostBroadcast() {
   if (!G.net.isHost || !G.net.ws || G.net.ws.readyState !== 1) return;
