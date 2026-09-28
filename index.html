@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>球球大王</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='18' fill='%2322d3ee'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #141a22; --panel-2: #1c2530;
+    --line: #2a3442; --text: #e6edf3; --dim: #8b98a8;
+    --player: #22d3ee; --gold: #fbbf24;
+    --r-common: #e5e7eb; --r-rare: #7dd3fc; --r-epic: #c084fc; --r-legendary: #fbbf24; --r-divine: #ffffff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg); color: var(--text);
+    font-family: "PingFang TC","Microsoft JhengHei","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    height: 100%; overflow: hidden; user-select: none;
+  }
+  #app {
+    display: flex; flex-direction: column; height: 100vh;
+    max-width: 1100px; margin: 0 auto; padding: 12px 16px; gap: 10px;
+  }
+  #app.hud-hidden #enemy-bar,
+  #app.hud-hidden #player-panel,
+  #app.hud-hidden #turn-num-wrap,
+  #app.hud-hidden #phase-tag,
+  #app.hud-hidden #vp-bar { display: none; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .title { font-size: 18px; font-weight: 800; letter-spacing: 2px; }
+  .title .dot {
+    display: inline-block; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--player); margin-right: 8px;
+  }
+  .hud { display: flex; gap: 16px; font-size: 13px; color: var(--dim); align-items: center; }
+  .hud b { color: var(--text); font-weight: 600; }
+  .coin {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 4px;
+    color: var(--gold); font-weight: 700; font-size: 13px;
+  }
+  .coin::before { content:''; width:10px; height:10px; border-radius:50%; background:var(--gold); }
+  .phase-tag {
+    padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;
+    background: var(--panel-2); border: 1px solid var(--line);
+  }
+  .phase-tag.battle { color: var(--gold); border-color: var(--gold); }
+  .phase-tag.draw { color: var(--player); border-color: var(--player); }
+
+  #vp-bar { display: flex; gap: 14px; align-items: center; font-size: 12px; }
+  .vp-chip { display: flex; align-items: center; gap: 5px; color: var(--dim); }
+  .vp-chip .swatch { width: 10px; height: 10px; border-radius: 50%; }
+  .vp-chip .dots { display: flex; gap: 2px; }
+  .vp-chip .vpdot { width: 9px; height: 9px; border-radius: 50%; background: #2a3442; }
+  .vp-chip .vpdot.on { background: var(--gold); }
+
+  #enemy-bar { display: flex; gap: 10px; flex-wrap: wrap; min-height: 34px; align-items: center; }
+  .enemy-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; font-size: 12px;
+  }
+  .enemy-chip .swatch { width: 12px; height: 12px; border-radius: 50%; }
+  .enemy-chip .hpbar { width: 90px; height: 6px; background: #2a3442; border-radius: 3px; overflow: hidden; }
+  .enemy-chip .hpfill { height: 100%; transition: width .2s; }
+  .enemy-chip.dead { opacity: 0.3; text-decoration: line-through; }
+
+  #arena-wrap {
+    position: relative; flex: 1; min-height: 0;
+    border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: #0f1620;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #draw-overlay {
+    position: absolute; inset: 0; background: rgba(11,15,20,0.85);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px; z-index: 5;
+  }
+  #draw-overlay.hidden { display: none; }
+  #draw-overlay .draw-title { font-size: 22px; font-weight: 700; letter-spacing: 2px; }
+  #draw-overlay .draw-timer { font-size: 16px; color: var(--gold); font-weight: 700; }
+  #draw-cards { display: flex; gap: 20px; }
+
+  .card {
+    width: 210px; height: 280px;
+    background: var(--panel); border-radius: 10px; padding: 10px;
+    cursor: pointer; display: flex; flex-direction: column; gap: 6px;
+    transition: transform .15s; position: relative; overflow: hidden;
+    border: 2px solid var(--line);
+  }
+  .card:hover { transform: translateY(-8px); }
+  .card .art {
+    flex: 1; border-radius: 6px; background: var(--panel-2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; font-weight: 800; color: #fff; overflow: hidden;
+  }
+  .card .art img { width: 100%; height: 100%; object-fit: cover; }
+  .card .name { font-size: 16px; font-weight: 700; text-align: center; }
+  .card .desc { font-size: 11px; color: var(--dim); line-height: 1.4; text-align: center; }
+  .card .rarity-tag {
+    position: absolute; top: 0; right: 0;
+    font-size: 11px; padding: 2px 8px;
+    border-bottom-left-radius: 6px; font-weight: 700;
+  }
+  .card.r-common { border-color: var(--r-common); }
+  .card.r-rare { border-color: var(--r-rare); box-shadow: 0 0 12px rgba(125,211,252,0.25); }
+  .card.r-epic { border-color: var(--r-epic); box-shadow: 0 0 14px rgba(192,132,252,0.35); }
+  .card.r-legendary { border-color: var(--r-legendary); box-shadow: 0 0 16px rgba(251,191,36,0.45); }
+  .card.r-divine { border-color:#fff; background:#000; box-shadow:0 0 18px rgba(255,255,255,0.5); color:#fff; }
+  .card.r-divine .art { background:#000; }
+  .card.r-divine .desc { color:#bbb; }
+  .rarity-tag.r-common { background: var(--r-common); color: #000; }
+  .rarity-tag.r-rare { background: var(--r-rare); color: #000; }
+  .rarity-tag.r-epic { background: var(--r-epic); color: #000; }
+  .rarity-tag.r-legendary { background: var(--r-legendary); color: #000; }
+  .rarity-tag.r-divine { background: #000; color: #fff; border:1px solid #fff; }
+  .dex-item.dex-divine { background:#fff !important; border:3px solid #000 !important; color:#000; }
+  .dex-item.dex-divine .art { background:#fff; }
+
+  #player-panel {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 14px;
+  }
+  .pp-ball {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--player); flex-shrink: 0;
+  }
+  .pp-stats { display: flex; gap: 18px; align-items: center; flex: 1; }
+  .pp-stat { font-size: 12px; color: var(--dim); }
+  .pp-stat b { display: block; font-size: 15px; color: var(--text); font-weight: 700; }
+  .pp-stat .hpbar { width: 110px; height: 8px; background: #2a3442; border-radius: 4px; overflow: hidden; }
+  .pp-stat .hpfill { height: 100%; background: var(--player); transition: width .2s; }
+  .pp-skills { display: flex; gap: 6px; flex-wrap: wrap; max-width: 300px; }
+  .pp-skill {
+    width: 30px; height: 30px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    background: var(--panel-2); border: 2px solid var(--line);
+  }
+
+  .overlay {
+    position: absolute; inset: 0; background: rgba(11,15,20,0.92);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 12px; text-align: center; z-index: 10; padding: 20px; overflow-y: auto;
+  }
+  .overlay.hidden { display: none; }
+  .overlay h1 { font-size: 34px; font-weight: 800; letter-spacing: 3px; cursor: pointer; }
+  .overlay h2 { font-size: 22px; font-weight: 700; }
+  .overlay p { color: var(--dim); max-width: 480px; line-height: 1.7; font-size: 14px; }
+  .name-edit { font-size: 13px; color: var(--player); margin-top: -8px; }
+  .menu-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; width: 260px; }
+  .btn {
+    padding: 13px 28px; border-radius: 6px;
+    font-size: 15px; font-weight: 700; cursor: pointer; letter-spacing: 1px;
+    transition: transform .12s; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line);
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn.primary { background: var(--player); color: #0b0f14; border-color: var(--player); }
+  .menu-row { display: flex; gap: 18px; margin-top: 6px; }
+  .menu-row .btn { padding: 8px 16px; font-size: 13px; }
+  .dex-grid {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: 10px;
+    max-width: 660px; margin-top: 10px;
+  }
+  .dex-item {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px; font-size: 12px; text-align: center;
+  }
+  .dex-item .art {
+    height: 60px; border-radius: 4px; background: var(--panel-2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800; margin-bottom: 6px; overflow: hidden;
+  }
+  .dex-item .art img { width: 100%; height: 100%; object-fit: cover; }
+  .dex-item.locked { opacity: 0.35; filter: grayscale(1); }
+  .dex-item.locked .art > * { visibility: hidden; }
+  .close-x {
+    position: absolute; top: 14px; right: 18px;
+    background: none; border: none; color: var(--dim);
+    font-size: 24px; cursor: pointer;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+<div id="app" class="hud-hidden">
+  <header>
+    <div class="title"><span class="dot"></span>球球大王</div>
+    <div class="hud">
+      <span class="coin" id="coin-num">0</span>
+      <span id="turn-num-wrap">回合 <b id="turn-num">1</b></span>
+      <span id="circle-tag" class="phase-tag" style="color:#ef4444;border-color:#ef4444">縮圈 --</span>
+      <span id="phase-tag" class="phase-tag">準備</span>
+    </div>
+  </header>
+
+  <div id="vp-bar"></div>
+  <div id="enemy-bar"></div>
+
+  <div id="arena-wrap">
+    <canvas id="arena"></canvas>
+
+    <div id="draw-overlay" class="hidden">
+      <div class="draw-title">抽一張卡強化自己</div>
+      <div class="draw-timer" id="draw-timer">30.0</div>
+      <div id="draw-cards"></div>
+    </div>
+
+    <div id="menu-overlay" class="overlay">
+      <h1 id="player-name-title">玩家</h1>
+      <div class="name-edit">點擊名字修改</div>
+      <p>15 滴血開局，活到最後得 1 勝點，先到 3 勝點奪冠。每 45 秒縮圈。<br>操作：WASD 移動，Shift 衝刺撞人。</p>
+      <div class="menu-btns">
+        <button class="btn primary" id="btn-solo">打人機</button>
+        <button class="btn" id="btn-duo">2v2 模式</button>
+        <button class="btn" id="btn-create">創建房間</button>
+        <button class="btn" id="btn-join">加入房間</button>
+      </div>
+      <div class="menu-row">
+        <button class="btn" id="btn-shop">皮膚商店</button>
+        <button class="btn" id="btn-dex">技能圖鑑</button>
+        <button class="btn" id="btn-rank">排行榜</button>
+      </div>
+    </div>
+
+    <div id="sub-overlay" class="overlay hidden">
+      <button class="close-x" id="btn-close-sub">×</button>
+      <h2 id="sub-title"></h2>
+      <div id="sub-body"></div>
+    </div>
+
+    <div id="end-overlay" class="overlay hidden">
+      <h1 id="end-title">勝利</h1>
+      <p id="end-desc"></p>
+      <button class="btn primary" id="btn-restart">返回主選單</button>
+    </div>
+  </div>
+
+  <div id="player-panel">
+    <div class="pp-ball"></div>
+    <div class="pp-stats">
+      <div class="pp-stat">生命<b>
+        <div class="hpbar"><div class="hpfill" id="pp-hp"></div></div>
+        <span id="pp-hp-text" style="font-size:11px;font-weight:400"></span>
+      </b></div>
+      <div class="pp-stat">攻擊<b id="pp-atk">3</b></div>
+      <div class="pp-stat">移速<b id="pp-spd">2.3</b></div>
+      <div class="pp-stat">衝刺<b id="pp-dash">就緒</b></div>
+    </div>
+    <div class="pp-skills" id="pp-skills"></div>
+  </div>
+</div>
+
+<img src="assets/terror-attack.png" alt="" style="display:none">
+<img src="assets/smoker.png" alt="" style="display:none">
+<img src="assets/mobster.png" alt="" style="display:none">
+<img src="assets/roadblock.png" alt="" style="display:none">
+<img src="assets/raptor.png" alt="" style="display:none">
+<img src="assets/inverse.png" alt="" style="display:none">
+<img src="assets/fool.png" alt="" style="display:none">
+<img src="assets/hawk.png" alt="" style="display:none">
+<img src="assets/turret.png" alt="" style="display:none">
+<img src="assets/plague.png" alt="" style="display:none">
+<img src="assets/rocket.png" alt="" style="display:none">
+<img src="assets/judge.png" alt="" style="display:none">
+<img src="assets/revive.png" alt="" style="display:none">
+<img src="assets/duel.png" alt="" style="display:none">
+<img src="assets/soul.png" alt="" style="display:none">
+<img src="assets/wither.png" alt="" style="display:none">
+<img src="assets/helicopter.png" alt="" style="display:none">
+<img src="assets/monk.png" alt="" style="display:none">
+<img src="assets/ghost.png" alt="" style="display:none">
+<img src="assets/judge-slash.png" alt="" style="display:none">
+<img src="assets/paralyze.png" alt="" style="display:none">
+<img src="assets/beast.png" alt="" style="display:none">
+<img src="assets/tank.png" alt="" style="display:none">
+
+<script>
+/* =========================================================
+ *  球球大王
+ * ========================================================= */
+const W = 800, H = 460;
+const BOUND = 14;
+const DRAW_TIME = 30;
+const BOMB_RADIUS = 170;
+const BOMB_INTERVAL = 12;
+const CIRCLE_SHRINK_INTERVAL = 45;
+const CIRCLE_DPS = 2;
+const WIN_POINTS = 3;
+const MAP_THEMES = [
+  { id:'original', name:'原版', bg:'#0f1620', dot:'rgba(255,255,255,0.04)', grid:'#2a3442' },
+  { id:'grass',    name:'草原', bg:'#14281a', dot:'rgba(180,255,180,0.05)', grid:'#2d4a35' },
+  { id:'hell',     name:'地獄', bg:'#2a1010', dot:'rgba(255,180,180,0.05)', grid:'#5a2a2a' },
+];
+
+const RARITY = {
+  common: { name: '普通' },
+  rare:   { name: '稀有' },
+  epic:   { name: '史詩' },
+  legendary: { name: '傳奇' },
+  divine: { name: '神級' },
+};
+
+// ---------- 卡牌池 ----------
+const CARD_POOL = [
+  // 普通
+  { id:'p_atk',  name:'力量強化', rarity:'common', icon:'▲', desc:'技能：力量。攻擊力永久 +1',
+    apply: b => { b.permAtkBonus += 1; } },
+  { id:'p_spd',  name:'迅捷', rarity:'common', icon:'»', desc:'移速 +5%',
+    apply: b => { b.permSpeedMult *= 1.05; } },
+  { id:'p_heal', name:'小血包', rarity:'common', icon:'+', desc:'技能：急救。立刻回復 3 HP',
+    apply: b => { b.hp = Math.min(b.maxHp, b.hp + 3); } },
+  { id:'p_hpmax',name:'強化心臟', rarity:'common', icon:'♥', desc:'生命上限 +3',
+    apply: b => { b.maxHp += 3; b.hp += 3; } },
+  // 稀有
+  { id:'r_bomb', name:'恐怖襲擊', rarity:'rare', img:'assets/terror-attack.png',
+    desc:'技能：自爆。每 12 秒自扣 2 血，大範圍對手扣 5 血',
+    apply: b => { b.hasBomb = true; b.bombTimer = 12; } },
+  { id:'r_atk',  name:'力量強化+', rarity:'rare', icon:'▲', desc:'技能：重擊。攻擊力永久 +2',
+    apply: b => { b.permAtkBonus += 2; } },
+  { id:'r_spd',  name:'迅捷+', rarity:'rare', icon:'»', desc:'移速 +10%',
+    apply: b => { b.permSpeedMult *= 1.10; } },
+  { id:'r_heal', name:'大血包', rarity:'rare', icon:'+', desc:'技能：包紮。立刻回復 5 HP',
+    apply: b => { b.hp = Math.min(b.maxHp, b.hp + 5); } },
+  { id:'r_hpmax',name:'強化心臟+', rarity:'rare', icon:'♥', desc:'生命上限 +5',
+    apply: b => { b.maxHp += 5; b.hp += 5; } },
+  { id:'r_smoker', name:'吸煙者', rarity:'rare', img:'assets/smoker.png',
+    desc:'每 15 秒自扣 5 血，3 秒內留下煙霧，碰到煙霧的對手攻擊 -2',
+    apply: b => { b.isSmoker = true; b.smokerTimer = 15; b.smokeTime = 0; } },
+  { id:'r_mobster', name:'黑手哥', rarity:'rare', img:'assets/mobster.png',
+    desc:'選擇後立即對所有對手造成 3 點傷害',
+    apply: (b, all) => { all.forEach(o => { if (o!==b && o.alive){ o.hp-=3; spawnFloat(o.x,o.y,'-3','#ef4444'); } }); } },
+  { id:'r_roadblock', name:'落魄的路障人', rarity:'rare', img:'assets/roadblock.png',
+    desc:'第一次被打後 10 秒內攻擊 +10、移速 +15%（只觸發一次）',
+    apply: b => { b.hasRage = true; b.rageTriggered = false; b.rageTimer = 0; } },
+  { id:'r_raptor', name:'速龍', rarity:'rare', img:'assets/raptor.png',
+    desc:'技能：警隊大佬。每次被打後 5 秒內移速 +20%',
+    apply: b => { b.hasHaste = true; b.hasteTimer = 0; } },
+  { id:'r_inverse', name:'逆命', rarity:'rare', img:'assets/inverse.png',
+    desc:'隨機擊暈一名玩家 5 秒（包括自己）',
+    apply: (b, all) => {
+      const t = all.filter(o=>o.alive);
+      const v = t[Math.floor(Math.random()*t.length)];
+      v.stunTimer = 5;
+      spawnFloat(v.x, v.y, '擊暈!', '#f59e0b');
+    } },
+  // 史詩
+  { id:'e_fool', name:'鄉里愚人', rarity:'epic', img:'assets/fool.png',
+    desc:'清理作業：隨機對 2 名對手造成 5 點傷害',
+    apply: (b, all) => {
+      const enemies = all.filter(o=>o!==b && o.alive);
+      for (let i=0;i<2 && enemies.length;i++) {
+        const idx = Math.floor(Math.random()*enemies.length);
+        const v = enemies.splice(idx,1)[0];
+        v.hp -= 5;
+        spawnFloat(v.x, v.y, '-5', '#c084fc');
+      }
+    } },
+  { id:'e_hawk', name:'飛鷹', rarity:'epic', img:'assets/hawk.png',
+    desc:'技能：高速離場。永久移速 +20%',
+    apply: b => { b.permSpeedMult *= 1.20; } },
+  { id:'e_turret', name:'簡易砲台', rarity:'epic', img:'assets/turret.png',
+    desc:'在腳下放一座砲台，15 秒內每 3 秒對 130 範圍內敵人造成 1 傷',
+    apply: b => {
+      G.turrets.push({ x:b.x, y:b.y, color:b.color, life:15, tick:2, ownerId:b.id });
+    } },
+  { id:'e_plague', name:'瘟疫醫生', rarity:'epic', img:'assets/plague.png',
+    desc:'死亡解藥：血上限 +10，每 10 秒回復 2 血',
+    apply: b => { b.maxHp += 10; b.hp += 10; b.hasPlague = true; b.plagueTimer = 10; } },
+  { id:'e_rocket', name:'火箭跳', rarity:'epic', img:'assets/rocket.png',
+    desc:'技能：火箭兵專用。每 15 秒自己飛向隨機位置：自扣 3 血，落地 100 範圍 10 傷',
+    apply: b => { b.hasRocket = true; b.rocketTimer = 15; } },
+  // 傳奇
+  { id:'l_judge', name:'空中執法', rarity:'legendary', img:'assets/judge.png',
+    desc:'每 15 秒隨機衝向一名對手：5 傷害、擊退、3 秒內對手移速 -20%',
+    apply: b => { b.hasJudge = true; b.judgeTimer = 10; } },
+  { id:'l_revive', name:'扣一復活老大', rarity:'legendary', img:'assets/revive.png',
+    desc:'技能：復活。死亡後自動復活回滿血，接下來 5 秒攻擊 +3',
+    apply: b => { b.canRevive = true; b.reviveUsed = false; } },
+  { id:'l_soul', name:'靈魂收割', rarity:'legendary', img:'assets/soul.png',
+    desc:'擊殺對手後回 5 血並 +5 血上限',
+    apply: b => { b.hasSoul = true; } },
+  { id:'l_wither', name:'凋零怪', rarity:'legendary', img:'assets/wither.png',
+    desc:'每 10 秒向三個方向射出凋零頭，命中造成 7 傷',
+    apply: b => { b.hasWither = true; b.witherTimer = 10; } },
+  // 神級
+  { id:'d_heli', name:'俄羅斯直升機', rarity:'divine', img:'assets/helicopter.png',
+    desc:'技能：混沌寄生。每回合開始隨機 3 個紅圈，2 秒後爆炸，站進去直接死',
+    apply: b => { b.hasHelicopter = true; } },
+  { id:'d_monk', name:'破戒僧', rarity:'divine', img:'assets/monk.png',
+    desc:'技能：忍無可忍。血量 ≤3 時自動開 10 秒霸體，並對全場對手造成 5 傷',
+    apply: b => { b.hasMonk = true; b.monkTriggered = false; } },
+  // 補充史詩
+  { id:'e_tank', name:'羅布樂思戰車', rarity:'epic', img:'assets/tank.png',
+    desc:'技能：毀滅衝鋒。每 10 秒隨方向衝 1 秒，撞到的人 3 傷並減速 25% 持續 5 秒',
+    apply: b => { b.hasTank = true; b.tankTimer = 10; b.tankCharge = 0; b.tankTrail = []; } },
+  // 補充傳奇
+  { id:'l_ghost', name:'血港鬼影', rarity:'legendary', img:'assets/ghost.png',
+    desc:'血量低於 5 時開 5 秒水下：移速 +20%、免疫傷害且無法攻擊，80 藍圈內敵人每秒 -2',
+    apply: b => { b.hasGhost = true; b.ghostTimer = 0; } },
+  { id:'l_paralyze', name:'癱瘓', rarity:'legendary', img:'assets/paralyze.png',
+    desc:'技能：沉默。選擇後停用全部玩家技能 5 秒',
+    apply: () => { G.paralysisTimer = 5; spawnFloat(W/2, H/2, '全場技能封印 5 秒!', '#a855f7'); } },
+  { id:'l_beast', name:'天水圍墮天地獄獸', rarity:'legendary', img:'assets/beast.png',
+    desc:'技能：捲土重來。血量低於 5 後開 3 秒狂暴：攻擊 +10、移速 +30%',
+    apply: b => { b.hasBeast = true; b.beastTriggered = false; } },
+  { id:'d_judge2', name:'審判之斬', rarity:'divine', img:'assets/judge-slash.png',
+    desc:'技能：破界。發射多條藍紫色細線持續 3 秒，碰到的對手扣 3 血',
+    apply: b => { b.hasJudgment = true; b.judgeTimer = 3; b.judgeLines = []; } },
+];
+
+// ---------- 存檔 ----------
+const Save = {
+  load(){ try{return JSON.parse(localStorage.getItem('qqdw_save'))||{};}catch(e){return {};} },
+  save(d){ localStorage.setItem('qqdw_save', JSON.stringify(d)); },
+};
+let store = Object.assign({ coins:0, seenSkills:[], wins:0, games:0, playerName:'玩家' }, Save.load());
+function persist(){ Save.save(store); }
+
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function pick(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function alive_balls(){ return G.balls.filter(b=>b.alive); }
+
+// ---------- 球 ----------
+let nextId = 1;
+class Ball {
+  constructor({ name, color, isPlayer=false }) {
+    this.id = nextId++;
+    this.name=name; this.color=color; this.isPlayer=isPlayer;
+    this.maxHp=15; this.hp=15;
+    this.baseAtk=3; this.baseSpeed=2.3;
+    this.permAtkBonus=0; this.permSpeedMult=1;
+    this.radius=20;  // 所有球開局一樣大
+    this.alive=true;
+    this.x=0; this.y=0; this.vx=0; this.vy=0;
+    this.ownedSkills=[];
+    // 計時器
+    this.hasBomb=false; this.bombTimer=0; this.bombFlash=0;
+    this.isSmoker=false; this.smokerTimer=0; this.smokeTime=0;
+    this.hasRage=false; this.rageTriggered=false; this.rageTimer=0;
+    this.hasHaste=false; this.hasteTimer=0;
+    this.hasTurret=false; this.turretTimer=0; this.turretTick=0;
+    this.hasPlague=false; this.plagueTimer=0;
+    this.stunTimer=0; this.smokeDebuffTimer=0; this.slowTimer=0;
+    this.hasJudge=false; this.judgeTimer=0;
+    this.canRevive=false; this.reviveUsed=false;
+    this.hasSoul=false; this.hasWither=false; this.witherTimer=0;
+    this.chargeTimer=0; this.chargeTarget=null;
+    this.reviveBuffTimer=0;
+    this.hasJudgment=false; this.judgeTimer=0; this.judgeLines=[]; this._lineCd=0;
+    this.hasBeast=false; this.beastTimer=0; this.beastTriggered=false;
+    this.team=0;
+    this.hasHelicopter=false;
+    this.hasMonk=false; this.monkTriggered=false; this.armorTimer=0;
+    this.hasRocket=false; this.rocketTimer=0;
+    this.hasGhost=false; this.ghostTimer=0;
+    this.hasTank=false; this.tankTimer=0; this.tankCharge=0; this.tankTrail=[];
+    this.victoryPoints=0;
+  }
+  recalcStats() {
+    // 移速 = base * 永久倍率 * 臨時倍率
+    let sm = this.permSpeedMult;
+    if (this.rageTimer > 0) sm *= 1.15;
+    if (this.beastTimer > 0) sm *= 1.30;
+    if (this.hasteTimer > 0) sm *= 1.20;
+    if (this.slowTimer > 0) sm *= 0.80;
+    if (this.ghostTimer > 0) sm *= 1.20;
+    this.speed = this.baseSpeed * sm;
+    // 攻擊 = base + 永久加成 + 臨時加成 - 煙霧減益
+    let atk = this.baseAtk + this.permAtkBonus;
+    if (this.reviveBuffTimer > 0) atk += 3;
+    if (this.rageTimer > 0) atk += 10;
+    if (this.beastTimer > 0) atk += 10;
+    if (this.smokeDebuffTimer > 0) atk -= 2;
+    this.atk = Math.max(1, atk);
+  }
+  resetForNewRound() {
+    this.hp = this.maxHp;
+    this.alive = true;
+    // 永久加成保留（直到奪冠），只重置臨時狀態
+    this.rageTriggered = false;
+    this.rageTimer = 0; this.hasteTimer = 0; this.smokeTime = 0;
+    this.stunTimer = 0; this.smokeDebuffTimer = 0; this.slowTimer = 0;
+    this.bombTimer = this.hasBomb ? 12 : 0;
+    this.smokerTimer = this.isSmoker ? 10 : 0;
+    this.plagueTimer = this.hasPlague ? 10 : 0;
+    this.judgeTimer = this.hasJudge ? 10 : 0;
+    this.witherTimer = this.hasWither ? 10 : 0;
+    this.reviveUsed = false;
+    this.chargeTimer = 0; this.chargeTarget = null;
+    this.monkTriggered = false; this.armorTimer = 0;
+    this.rocketTimer = this.hasRocket ? 10 : 0;
+    this.ghostTimer = 0;
+    this.tankTimer = this.hasTank ? 15 : 0;
+    this.tankCharge = 0; this.tankTrail = [];
+    this.recalcStats();
+  }
+  launch(others) {
+    let tries=0;
+    do {
+      this.x = BOUND+this.radius+Math.random()*(W-BOUND*2-this.radius*2);
+      this.y = BOUND+this.radius+Math.random()*(H-BOUND*2-this.radius*2);
+      tries++;
+    } while (tries<120 && others.some(o=>dist(this,o)<this.radius+o.radius+80));
+    const ang=Math.random()*Math.PI*2;
+    this.vx=Math.cos(ang)*this.speed; this.vy=Math.sin(ang)*this.speed;
+  }
+  update(dt) {
+    if (this.stunTimer > 0) { this.stunTimer -= dt; this.vx=0; this.vy=0; }
+    // 空中執法衝鋒：持續朝目標衝
+    if (this.chargeTimer > 0 && this.chargeTarget && this.chargeTarget.alive) {
+      this.chargeTimer -= dt;
+      const t = this.chargeTarget;
+      const ang = Math.atan2(t.y-this.y, t.x-this.x);
+      const sp = this.speed * 2.2;
+      this.vx = Math.cos(ang)*sp; this.vy = Math.sin(ang)*sp;
+    } else if (this.chargeTimer > 0) {
+      this.chargeTimer = 0; this.chargeTarget = null;
+    }
+    // WASD 玩家直接控制
+    if (this.isPlayer && this.stunTimer <= 0 && this.chargeTimer <= 0 && G.dashTime <= 0) {
+      let dx = 0, dy = 0;
+      if (G.keys['w']) dy -= 1;
+      if (G.keys['s']) dy += 1;
+      if (G.keys['a']) dx -= 1;
+      if (G.keys['d']) dx += 1;
+      if (dx || dy) {
+        const m = Math.hypot(dx,dy);
+        this.vx = dx/m * this.speed;
+        this.vy = dy/m * this.speed;
+      } else {
+        this.vx *= 0.9; this.vy *= 0.9;
+        if (Math.hypot(this.vx,this.vy) < 0.1) { this.vx=0; this.vy=0; }
+      }
+    }
+    this.x += this.vx*dt*60;
+    this.y += this.vy*dt*60;
+    if (this.x-this.radius<BOUND){this.x=BOUND+this.radius;this.vx=Math.abs(this.vx);}
+    if (this.x+this.radius>W-BOUND){this.x=W-BOUND-this.radius;this.vx=-Math.abs(this.vx);}
+    if (this.y-this.radius<BOUND){this.y=BOUND+this.radius;this.vy=Math.abs(this.vy);}
+    if (this.y+this.radius>H-BOUND){this.y=H-BOUND-this.radius;this.vy=-Math.abs(this.vy);}
+    if (G.duelBox && G.duelBox.active && G.duelIds && G.duelIds.has(this.id)) {
+      const dx1=G.duelBox.x, dx2=G.duelBox.x+G.duelBox.size;
+      const dy1=G.duelBox.y, dy2=G.duelBox.y+G.duelBox.size;
+      if(this.x-this.radius<dx1){this.x=dx1+this.radius;this.vx=Math.abs(this.vx);}
+      if(this.x+this.radius>dx2){this.x=dx2-this.radius;this.vx=-Math.abs(this.vx);}
+      if(this.y-this.radius<dy1){this.y=dy1+this.radius;this.vy=Math.abs(this.vy);}
+      if(this.y+this.radius>dy2){this.y=dy2-this.radius;this.vy=-Math.abs(this.vy);}
+    }
+    // 歸一化速度到 this.speed（防止碰撞後越打越快），玩家/衝鋒/暈眩時不歸一化
+    if (!this.isPlayer && this.stunTimer <= 0 && this.chargeTimer <= 0 && G.dashTime <= 0) {
+      const mag = Math.hypot(this.vx, this.vy);
+      if (mag > 0.01) {
+        this.vx = this.vx/mag*this.speed;
+        this.vy = this.vy/mag*this.speed;
+      } else {
+        const ang = Math.random()*Math.PI*2;
+        this.vx = Math.cos(ang)*this.speed;
+        this.vy = Math.sin(ang)*this.speed;
+      }
+    }
+    if (this.bombFlash>0) this.bombFlash -= dt;
+    if (this.smokeTime>0) this.smokeTime -= dt;
+    if (this.rageTimer>0) this.rageTimer -= dt;
+    if (this.hasteTimer>0) this.hasteTimer -= dt;
+    if (this.smokeDebuffTimer>0) this.smokeDebuffTimer -= dt;
+    if (this.slowTimer>0) this.slowTimer -= dt;
+    if (this.armorTimer>0) this.armorTimer -= dt;
+    if (this.ghostTimer>0) this.ghostTimer -= dt;
+    if (this.reviveBuffTimer>0) this.reviveBuffTimer -= dt;
+    if (this.beastTimer>0) this.beastTimer -= dt;
+  }
+  draw(ctx) {
+    if (!this.alive) return;
+    // 純色球，無白圈無高光
+    ctx.fillStyle = this.color;
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fill();
+    if (this.armorTimer > 0) {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+4,0,Math.PI*2); ctx.stroke();
+    }
+    if (this.ghostTimer > 0) {
+      ctx.fillStyle = 'rgba(59,130,246,0.15)';
+      ctx.beginPath(); ctx.arc(this.x,this.y,80,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(this.x,this.y,80,0,Math.PI*2); ctx.stroke();
+    }
+    if (this.tankCharge > 0) {
+      ctx.fillStyle = 'rgba(251,191,36,0.3)';
+      ctx.beginPath(); ctx.arc(this.x,this.y,this.radius+6,0,Math.PI*2); ctx.fill();
+    }
+    if (this.stunTimer > 0) {
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = 'bold 13px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('暈', this.x, this.y - this.radius - 10);
+    }
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    ctx.font='11px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(this.name,this.x,this.y-this.radius-8);
+    if (this.bombFlash>0) {
+      const t = this.bombFlash/0.4;
+      ctx.strokeStyle = `rgba(251,191,36,${t})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(this.x,this.y,BOMB_RADIUS*(1-t*0.3),0,Math.PI*2); ctx.stroke();
+    }
+  }
+}
+
+// ---------- 遊戲狀態 ----------
+const canvas = document.getElementById('arena');
+const ctx = canvas.getContext('2d');
+function fitCanvas(){
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',fitCanvas); fitCanvas();
+
+const G = {
+  state: 'menu',
+  round: 1,
+  balls: [],
+  floatTexts: [],
+  smokeParticles: [],
+  projectiles: [],
+  rocketFx: [],
+  turrets: [],
+  bombSites: [],
+  paralysisTimer: 0,
+  WS_URL: 'wss://你的後端.onrender.com',
+  net: { isHost:false, isGuest:false, peer:null, conn:null, conns:[], remoteInputs:{}, remoteBalls:{}, roomCode:'', lastBroadcast:0 },
+  currentCards: [],
+  hitCooldowns: new Map(),
+  drawTimer: 0,
+  lastWinnerId: null,
+  circle: { r: Math.hypot(W,H), timer: 50, count: 0 },
+  duelBox: null,
+  duelIds: null,
+  mapTheme: MAP_THEMES[0],
+  teamMode: false,
+  keys: {},
+  dashCd: 0,
+  dashTime: 0,
+};
+
+function initGame(teamMode) {
+  nextId = 1;
+  G.teamMode = !!teamMode;
+  G.mapTheme = MAP_THEMES[Math.floor(Math.random()*MAP_THEMES.length)];
+  document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+  const teamColor = ['#22d3ee','#ef4444'];
+  if (G.teamMode) {
+    G.balls = [
+      Object.assign(new Ball({ name: store.playerName, color:'#22d3ee', isPlayer:true }), {team:0}),
+      Object.assign(new Ball({ name:'隊友', color:'#06b6d4' }), {team:0}),
+      Object.assign(new Ball({ name:'敵A', color:'#ef4444' }), {team:1}),
+      Object.assign(new Ball({ name:'敵B', color:'#f97316' }), {team:1}),
+    ];
+  } else {
+    G.balls = [
+      new Ball({ name: store.playerName, color:'#22d3ee', isPlayer:true }),
+      new Ball({ name:'赤', color:'#ef4444' }),
+      new Ball({ name:'翠', color:'#22c55e' }),
+      new Ball({ name:'紫', color:'#a855f7' }),
+    ];
+  }
+  G.round = 1;
+  G.floatTexts = []; G.smokeParticles = [];
+  G.projectiles = []; G.rocketFx = []; G.turrets = []; G.bombSites = [];
+  G.duelBox = null; G.duelIds = null;
+}
+
+// ---------- 抽卡 ----------
+function startDrawPhase() {
+  G.state = 'draw';
+  G.drawTimer = DRAW_TIME;
+  document.getElementById('phase-tag').textContent = '選卡中';
+  document.getElementById('phase-tag').className = 'phase-tag draw';
+  const player = G.balls.find(b=>b.isPlayer);
+  if (player.id === G.lastWinnerId) {
+    document.querySelector('#draw-overlay .draw-title').textContent = '上輪勝者，跳過抽卡…';
+    document.getElementById('draw-cards').innerHTML = '';
+    document.getElementById('draw-overlay').classList.remove('hidden');
+    setTimeout(() => { if (G.state==='draw') startBattlePhase(); }, 1200);
+  } else {
+    document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
+    showDrawCards(rollCards(3));
+  }
+  // 聯機：給每個遠端客人發他自己的 3 張卡（廣播，伺服器會路由）
+  if (G.net.isHost && G.net.ws && G.net.ws.readyState === 1) {
+    G.pendingPicks = {};
+    Object.keys(G.net.remoteBalls).forEach(pid => {
+      const ball = G.balls.find(b => b.remoteId === pid);
+      if (!ball) return;
+      const cards = rollCards(3);
+      G.pendingPicks[pid] = { ball, cards, picked:false };
+      // 用 guestTarget 指定給哪個客人
+      G.net.ws.send(JSON.stringify({ t:'drawCards', guestTarget: pid, cards: cards.map(c=>({id:c.id, name:c.name, desc:c.desc, rarity:c.rarity, img:c.img, icon:c.icon})) }));
+    });
+  }
+  updateHUD();
+}
+function rollCards(n) {
+  const bag = [...CARD_POOL];
+  const out = [];
+  for (let i=0;i<n && bag.length;i++) out.push(bag.splice(Math.floor(Math.random()*bag.length),1)[0]);
+  return out;
+}
+function showDrawCards(cards) {
+  G.currentCards = cards;
+  const wrap = document.getElementById('draw-cards');
+  wrap.innerHTML = '';
+  cards.forEach(card => {
+    const el = document.createElement('div');
+    el.className = `card r-${card.rarity}`;
+    const artInner = card.img ? `<img src="${card.img}" alt="">` : card.icon;
+    el.innerHTML = `
+      <div class="rarity-tag r-${card.rarity}">${RARITY[card.rarity].name}</div>
+      <div class="art">${artInner}</div>
+      <div class="name">${card.name}</div>
+      <div class="desc">${card.desc}</div>
+    `;
+    el.onclick = () => onCardChosen(card);
+    wrap.appendChild(el);
+  });
+  document.getElementById('draw-overlay').classList.remove('hidden');
+}
+function hideDrawCards() { document.getElementById('draw-overlay').classList.add('hidden'); }
+function onCardChosen(card) {
+  const player = G.balls.find(b => b.isPlayer && b.alive);
+  if (!player) return;
+  card.apply(player, G.balls);
+  player.ownedSkills.push(card.id);
+  player.recalcStats();
+  if (!store.seenSkills.includes(card.id)) { store.seenSkills.push(card.id); persist(); }
+  spawnFloat(player.x, player.y - player.radius - 14, card.name, '#fff');
+  if (G.net.isHost) {
+    // 房主：AI 自己抽
+    G.balls.filter(b => !b.isPlayer && !b.isRemote && b.alive).forEach(ai => {
+      const c = pick(CARD_POOL);
+      c.apply(ai, G.balls);
+      ai.ownedSkills.push(c.id);
+      ai.recalcStats();
+    });
+    // 等所有遠端客人選完
+    waitForRemotePicks().then(() => {
+      hideDrawCards();
+      startBattlePhase();
+    });
+  } else {
+    // 客人：把選擇發給房主
+    if (G.net.ws && G.net.ws.readyState === 1) G.net.ws.send(JSON.stringify({ t:'picked', cardId: card.id }));
+    hideDrawCards();
+  }
+}
+function waitForRemotePicks() {
+  const pending = Object.values(G.pendingPicks||{}).filter(p=>!p.picked);
+  if (pending.length === 0) return Promise.resolve();
+  return new Promise(resolve => {
+    const iv = setInterval(() => {
+      const still = Object.values(G.pendingPicks||{}).filter(p=>!p.picked);
+      if (still.length === 0 || G.drawTimer <= 0) {
+        clearInterval(iv);
+        // 沒選的隨機幫他選
+        Object.values(G.pendingPicks||{}).forEach(p => {
+          if (!p.picked) {
+            const c = pick(p.cards);
+            c.apply(p.ball, G.balls);
+            p.ball.ownedSkills.push(c.id);
+            p.ball.recalcStats();
+          }
+        });
+        resolve();
+      }
+    }, 200);
+  });
+}
+
+// ---------- 戰鬥 ----------
+function startBattlePhase() {
+  G.state = 'battle';
+  document.getElementById('phase-tag').textContent = '戰鬥中';
+  document.getElementById('phase-tag').className = 'phase-tag battle';
+  G.circle.r = Math.hypot(W,H);
+  G.circle.timer = 50; G.circle.count = 0; G.circle.r = Math.hypot(W,H);
+  G.projectiles = []; G.rocketFx = []; G.bombSites = [];
+  G.duelBox = null; G.duelIds = null;
+  G.currentCards = [];
+  hideDrawCards();
+  G.balls.forEach(b => {
+    if (b.alive) {
+      const ang=Math.random()*Math.PI*2;
+      b.vx=Math.cos(ang)*b.speed; b.vy=Math.sin(ang)*b.speed;
+    }
+  });
+  // 直升機轟炸：每回合開始隨機 3 個紅圈
+  G.balls.forEach(b => {
+    if (b.alive && b.hasHelicopter) {
+      for (let k=0;k<3;k++) {
+        G.bombSites.push({
+          x: BOUND+80+Math.random()*(W-BOUND*2-160),
+          y: BOUND+80+Math.random()*(H-BOUND*2-160),
+          timer: 2.0, exploded:false, ownerId: b.id, r:90
+        });
+      }
+      spawnFloat(b.x, b.y-30, '轟炸!', '#ef4444');
+    }
+  });
+  updateHUD();
+}
+function endRound() {
+  const alive = G.balls.filter(b=>b.alive);
+  if (G.teamMode) {
+    const teams = [...new Set(alive.map(b=>b.team))];
+    if (teams.length === 1) {
+      const wTeam = teams[0];
+      G.balls.filter(b=>b.team===wTeam && b.alive).forEach(w => {
+        w.victoryPoints++;
+        spawnFloat(w.x, w.y, '+1 勝點', '#fbbf24');
+      });
+      G.lastWinnerId = G.balls.find(b=>b.team===wTeam && b.isPlayer)?.id || G.balls.find(b=>b.team===wTeam)?.id;
+      const champ = G.balls.find(b=>b.victoryPoints>=WIN_POINTS);
+      if (champ) return gameOver(champ);
+    }
+  } else if (alive.length === 1) {
+    const winner = alive[0];
+    winner.victoryPoints++;
+    G.lastWinnerId = winner.id;
+    spawnFloat(winner.x, winner.y, '+1 勝點', '#fbbf24');
+    if (winner.victoryPoints >= WIN_POINTS) return gameOver(winner);
+  }
+  G.balls.forEach(b => { b.resetForNewRound(); b.launch(G.balls.filter(o=>o!==b)); });
+  G.round++;
+  startDrawPhase();
+}
+function gameOver(winner) {
+  G.state='gameOver';
+  store.games++;
+  if (winner.isPlayer) { store.wins++; store.coins += 100; }
+  persist();
+  document.getElementById('phase-tag').textContent = '結束';
+  document.getElementById('end-title').textContent = winner.isPlayer ? '你奪冠了' : `${winner.name} 奪冠`;
+  document.getElementById('end-desc').textContent = `共打了 ${G.round} 輪。`;
+  document.getElementById('end-overlay').classList.remove('hidden');
+  updateHUD();
+}
+
+// ---------- 物理 ----------
+function stepPhysics(dt) {
+  const alive = G.balls.filter(b=>b.alive);
+  alive.forEach(b=>{ b.update(dt); b.recalcStats(); });
+
+  // 癱瘓：暫停所有技能
+  if (G.paralysisTimer > 0) G.paralysisTimer -= dt;
+  const skillsFrozen = G.paralysisTimer > 0;
+
+  // 縮圈：第一次 50s、第二次 30s、第三次 15s；剩 2 人後持續縮
+  G.circle.timer -= dt;
+  if (G.circle.timer <= 0) {
+    G.circle.count++;
+    if (alive.length <= 2) {
+      G.circle.timer = 2.5;
+      G.circle.r *= 0.96;
+    } else {
+      const gaps = [50, 30, 15];
+      G.circle.timer = gaps[Math.min(G.circle.count-1, 2)] || 15;
+      G.circle.r *= 0.7;
+    }
+    if (G.circle.r < 120) G.circle.r = 120;
+    spawnFloat(W/2, H/2, '縮圈!', '#ef4444');
+  }
+  alive.forEach(b => {
+    if (Math.hypot(b.x-W/2, b.y-H/2) > G.circle.r - b.radius) b.hp -= CIRCLE_DPS*dt;
+  });
+
+  // 房主：把遙控輸入套到 remote ball
+  if (G.net.isHost) alive.forEach(b => {
+    if (b.isRemote && G.net.remoteInputs[b.remoteId]) {
+      const k = G.net.remoteInputs[b.remoteId];
+      let dx = 0, dy = 0;
+      if (k['w']) dy -= 1; if (k['s']) dy += 1;
+      if (k['a']) dx -= 1; if (k['d']) dx += 1;
+      if (dx || dy) {
+        const m = Math.hypot(dx,dy);
+        b.vx = dx/m * b.speed; b.vy = dy/m * b.speed;
+      } else {
+        b.vx *= 0.9; b.vy *= 0.9;
+      }
+    }
+  });
+
+  // 計時類被動
+  if (!skillsFrozen) alive.forEach(b => {
+    if (b.hasBomb) {
+      b.bombTimer -= dt;
+      if (b.bombTimer <= 0) {
+        b.bombTimer = BOMB_INTERVAL;
+        b.bombFlash = 0.4; b.hp -= 2;
+        spawnFloat(b.x, b.y-b.radius-14, '自爆!', '#fbbf24');
+        alive.forEach(o => { if (o!==b && o.alive && dist(b,o)<BOMB_RADIUS){ o.hp-=5; spawnFloat(o.x,o.y,'-5','#fbbf24'); } });
+      }
+    }
+    if (b.isSmoker) {
+      b.smokerTimer -= dt;
+      if (b.smokerTimer <= 0) {
+        b.smokerTimer = 10; b.smokeTime = 3; b.hp -= 2;
+        spawnFloat(b.x, b.y, '吸煙 -2', '#94a3b8');
+      }
+    }
+    // 煙霧軌跡
+    if (b.smokeTime > 0) {
+      G.smokeParticles.push({ x:b.x, y:b.y, life:3, maxLife:3 });
+    }
+    // 瘟疫醫生回血
+    if (b.hasPlague) {
+      b.plagueTimer -= dt;
+      if (b.plagueTimer <= 0) {
+        b.plagueTimer = 10;
+        b.hp = Math.min(b.maxHp, b.hp + 2);
+        spawnFloat(b.x, b.y, '+2', '#22c55e');
+      }
+    }
+    // 空中執法：每 10 秒衝向隨機對手（衝刺期間無敵）
+    if (b.hasJudge) {
+      b.judgeTimer -= dt;
+      if (b.judgeTimer <= 0) {
+        b.judgeTimer = 10;
+        const targets = alive.filter(o=>o!==b);
+        if (targets.length) {
+          const t = pick(targets);
+          b.chargeTimer = 1.1;
+          b.chargeTarget = t;
+          spawnFloat(b.x, b.y-b.radius-14, '執法!', '#fbbf24');
+        }
+      }
+    }
+    // 凋零怪：每 10 秒發射 3 個凋零頭
+    if (b.hasWither) {
+      b.witherTimer -= dt;
+      if (b.witherTimer <= 0) {
+        b.witherTimer = 10;
+        for (let k=0;k<3;k++) {
+          const ang = (Math.PI*2/3)*k + Math.random()*0.3;
+          G.projectiles.push({
+            x:b.x, y:b.y, vx:Math.cos(ang)*3.5, vy:Math.sin(ang)*3.5,
+            life:2.5, owner:b.id
+          });
+        }
+        spawnFloat(b.x, b.y-b.radius-14, '凋零!', '#4ade80');
+      }
+    }
+  });
+
+  if (G.dashCd > 0) G.dashCd -= dt;
+  if (G.dashTime > 0) G.dashTime -= dt;
+
+  // 火箭爆炸特效
+  G.rocketFx = G.rocketFx.filter(f=>{ f.life -= dt; return f.life > 0; });
+
+  // 直升機轟炸點：倒計時後爆炸，站在範圍內直接死
+  G.bombSites = G.bombSites.filter(bs => {
+    bs.timer -= dt;
+    if (bs.timer <= 0 && !bs.exploded) {
+      bs.exploded = true;
+      alive.forEach(o => {
+        if (o.alive && o.id !== bs.ownerId && Math.hypot(o.x-bs.x,o.y-bs.y) < (bs.r||90)) {
+          o.hp = 0;
+          spawnFloat(o.x, o.y, '轟炸!', '#ef4444');
+        }
+      });
+      G.rocketFx.push({ x:bs.x, y:bs.y, life:0.6, r:100, red:true });
+      return false;
+    }
+    return true;
+  });
+
+  // 破戒僧：血量低於 3 觸發一次霸體
+  alive.forEach(b => {
+    if (b.hasMonk && !b.monkTriggered && b.hp <= 3 && b.armorTimer <= 0) {
+      b.monkTriggered = true;
+      b.armorTimer = 10;
+      spawnFloat(b.x, b.y-30, '忍無可忍!', '#fff');
+      alive.forEach(o => {
+        if (o!==b && o.alive) { o.hp -= 5; spawnFloat(o.x,o.y,'-5','#fff'); }
+      });
+    }
+    // 火箭跳：每 10 秒隨機位置轟炸
+    if (b.hasRocket) {
+      b.rocketTimer -= dt;
+      if (b.rocketTimer <= 0) {
+        b.rocketTimer = 15;
+        b.hp = Math.max(1, b.hp - 3);
+        const pad = 90;
+        const tx = pad + Math.random()*(W-pad*2);
+        const ty = pad + Math.random()*(H-pad*2);
+        b.x = tx; b.y = ty; b.vx = 0; b.vy = 0;
+        G.rocketFx.push({ x:tx, y:ty, life:0.8, r:100 });
+        alive.forEach(o => {
+          if (o.alive && o!==b && Math.hypot(o.x-tx,o.y-ty) < 100) {
+            o.hp -= 10;
+            spawnFloat(o.x, o.y, '-10', '#fbbf24');
+          }
+        });
+        spawnFloat(tx, ty-30, '火箭降落!', '#fbbf24');
+      }
+    }
+    // 血港鬼影：血量低於 5 開 8 秒水下
+    if (b.hasGhost && b.ghostTimer <= 0 && b.hp <= 5) {
+      b.ghostTimer = 5;
+      spawnFloat(b.x, b.y-30, '汪洋死域!', '#3b82f6');
+    }
+    // 鬼影領域：敵人每秒扣 2
+    if (b.ghostTimer > 0) {
+      alive.forEach(o => {
+        if (o!==b && o.alive && Math.hypot(o.x-b.x, o.y-b.y) < 80) {
+          o.hp -= 2*dt;
+        }
+      });
+    }
+    // 羅布樂思戰車：每 15 秒隨方向衝刺
+    if (b.hasTank) {
+      b.tankTimer -= dt;
+      if (b.tankTimer <= 0 && b.tankCharge <= 0) {
+        b.tankTimer = 15;
+        b.tankCharge = 1.0;
+        const ang = Math.random()*Math.PI*2;
+        b.tankAng = ang;
+        b.vx = Math.cos(ang)*b.speed*3;
+        b.vy = Math.sin(ang)*b.speed*3;
+        spawnFloat(b.x, b.y-30, '毀滅衝鋒!', '#fbbf24');
+      }
+      if (b.tankCharge > 0) {
+        b.tankCharge -= dt;
+        b.tankTrail.push({ x:b.x, y:b.y, life:0.5 });
+        alive.forEach(o => {
+          if (o!==b && o.alive && dist(b,o) < b.radius+o.radius+10) {
+            const key = 'tank_'+b.id+'_'+o.id;
+            const cd = G.hitCooldowns.get(key)||0;
+            if (cd<=0) {
+              o.hp -= 3;
+              o.slowTimer = Math.max(o.slowTimer||0, 5);
+              spawnFloat(o.x, o.y, '-3', '#fbbf24');
+              G.hitCooldowns.set(key, 0.8);
+            }
+          }
+        });
+      }
+    }
+  });
+
+  // 戰車軌跡衰減
+  alive.forEach(b => {
+    if (b.tankTrail) b.tankTrail = b.tankTrail.filter(t => (t.life -= dt) > 0);
+  });
+
+  // 固定式砲台更新
+  G.turrets = G.turrets.filter(tu => {
+    tu.life -= dt;
+    tu.tick -= dt;
+    if (tu.tick <= 0) {
+      tu.tick = 2;
+      alive.forEach(o => {
+        if (o.id !== tu.ownerId && o.alive && Math.hypot(o.x-tu.x,o.y-tu.y) < 130) {
+          o.hp -= 2;
+          spawnFloat(o.x, o.y, '-2', tu.color);
+        }
+      });
+    }
+    return tu.life > 0;
+  });
+
+  // 單挑方框：把非單挑者推出方框
+  if (G.duelBox && G.duelBox.active) {
+    const dx1=G.duelBox.x, dx2=G.duelBox.x+G.duelBox.size;
+    const dy1=G.duelBox.y, dy2=G.duelBox.y+G.duelBox.size;
+    alive.forEach(b => {
+      if (G.duelIds && G.duelIds.has(b.id)) return;
+      const nx1=dx1-b.radius, nx2=dx2+b.radius;
+      const ny1=dy1-b.radius, ny2=dy2+b.radius;
+      if (b.x>nx1 && b.x<nx2 && b.y>ny1 && b.y<ny2) {
+        // 找最近邊緣推出
+        const dLeft = b.x-nx1, dRight = nx2-b.x;
+        const dTop = b.y-ny1, dBottom = ny2-b.y;
+        const m = Math.min(dLeft,dRight,dTop,dBottom);
+        if (m===dLeft) { b.x=nx1; b.vx=-Math.abs(b.vx); }
+        else if (m===dRight) { b.x=nx2; b.vx=Math.abs(b.vx); }
+        else if (m===dTop) { b.y=ny1; b.vy=-Math.abs(b.vy); }
+        else { b.y=ny2; b.vy=Math.abs(b.vy); }
+      }
+    });
+  }
+
+  // 凋零投射物移動與碰撞
+  G.projectiles = G.projectiles.filter(p => {
+    p.x += p.vx*dt*60; p.y += p.vy*dt*60; p.life -= dt;
+    if (p.x<BOUND||p.x>W-BOUND||p.y<BOUND||p.y>H-BOUND) return false;
+    for (const o of alive) {
+      if (o.id !== p.owner && o.alive && dist(p,o) < o.radius+15) {
+        o.hp -= 7;
+        spawnFloat(o.x, o.y, '-7', '#4ade80');
+        return false;
+      }
+    }
+    return p.life > 0;
+  });
+
+  // 單挑方框：只剩一人時解除
+  if (G.duelBox && G.duelBox.active) {
+    const duelers = alive.filter(b=>G.duelIds && G.duelIds.has(b.id));
+    if (duelers.length <= 1) {
+      G.duelBox.active = false;
+      spawnFloat(W/2, H/2, '單挑結束', '#fbbf24');
+    }
+  }
+
+  // 審判之斬：發射線條
+  alive.forEach(b => {
+    if (b.hasJudgment && b.judgeTimer > 0) {
+      b.judgeTimer -= dt;
+      b._lineCd -= dt;
+      if (b._lineCd <= 0) {
+        b._lineCd = 0.2;
+        for (let i=0;i<2;i++) {
+          const ang = Math.random()*Math.PI*2;
+          b.judgeLines.push({ x:b.x, y:b.y, dx:Math.cos(ang), dy:Math.sin(ang), life:1.2, dealt:new Set() });
+        }
+      }
+      b.judgeLines.forEach(L => {
+        L.x += L.dx*400*dt; L.y += L.dy*400*dt; L.life -= dt;
+        alive.forEach(o => {
+          if (o===b || !o.alive || L.dealt.has(o.id)) return;
+          if (Math.hypot(o.x-L.x, o.y-L.y) < o.radius+2) {
+            L.dealt.add(o.id);
+            o.hp -= 3;
+            spawnFloat(o.x, o.y, '-3 斬', '#818cf8');
+          }
+        });
+      });
+      b.judgeLines = b.judgeLines.filter(L => L.life > 0);
+    }
+  });
+
+  // 野獸觸發
+  if (!skillsFrozen) alive.forEach(b => {
+    if (b.hasBeast && !b.beastTriggered && b.hp <= 5) {
+      b.beastTriggered = true;
+      b.beastTimer = 3;
+      spawnFloat(b.x, b.y-30, '捲土重來!', '#ef4444');
+    }
+  });
+
+  // 煙霧粒子更新 & 碰撞
+  G.smokeParticles = G.smokeParticles.filter(p => {
+    p.life -= dt;
+    return p.life > 0;
+  });
+  alive.forEach(b => {
+    for (const p of G.smokeParticles) {
+      if (dist(b, p) < b.radius + 8 && !p.dealt) {
+        p.dealt = true;
+        b.hp -= 2;
+        spawnFloat(b.x, b.y, '-2 煙', '#94a3b8');
+      }
+    }
+  });
+
+  // 球間碰撞：強制分離 + 彈開，防止貼身
+  for (let i=0;i<alive.length;i++) for (let j=i+1;j<alive.length;j++) {
+    const a=alive[i], c=alive[j];
+    const dx=c.x-a.x, dy=c.y-a.y;
+    const d=Math.hypot(dx,dy), min=a.radius+c.radius;
+    if (d<min && d>0) {
+      const ov=(min-d)/2 + 1, nx=dx/d, ny=dy/d;
+      a.x-=nx*ov*2; a.y-=ny*ov*2; c.x+=nx*ov*2; c.y+=ny*ov*2;
+      // 彈開：沿法線給一個固定衝量
+      const push = 5;
+      a.vx -= nx*push; a.vy -= ny*push;
+      c.vx += nx*push; c.vy += ny*push;
+      const key=a.id<c.id?`${a.id}_${c.id}`:`${c.id}_${a.id}`;
+      const cd=G.hitCooldowns.get(key)||0;
+      if (cd<=0) {
+        dealDamage(a,c); dealDamage(c,a);
+        G.hitCooldowns.set(key, 0.6);
+      }
+    }
+  }
+  for (const [k,v] of G.hitCooldowns) {
+    const nv=v-dt;
+    if (nv<=0) G.hitCooldowns.delete(k); else G.hitCooldowns.set(k,nv);
+  }
+
+  alive.forEach(b => {
+    if (b.hp<=0 && b.alive){
+      // 復活
+      if (b.canRevive && !b.reviveUsed) {
+        b.reviveUsed = true;
+        b.hp = b.maxHp;
+        b.reviveBuffTimer = 5;
+        b.recalcStats();
+        spawnFloat(b.x, b.y, '復活! +3攻 5秒', '#fbbf24');
+        return;
+      }
+      b.alive=false;
+      spawnFloat(b.x,b.y,'擊破','#fff');
+      // 靈魂收割
+      G.balls.forEach(k => {
+        if (k.alive && k.hasSoul) {
+          k.hp = Math.min(k.maxHp+5, k.hp+5);
+          k.maxHp += 5;
+          spawnFloat(k.x, k.y-20, '靈魂+5', '#a855f7');
+        }
+      });
+    }
+  });
+}
+function dealDamage(att, tgt) {
+  if (att.ghostTimer > 0) return;
+  if (tgt.armorTimer > 0) { spawnFloat(tgt.x, tgt.y, '免疫', '#fff'); return; }
+  if (tgt.ghostTimer > 0) { spawnFloat(tgt.x, tgt.y, '水下', '#3b82f6'); return; }
+  if (tgt.chargeTimer > 0) { spawnFloat(tgt.x, tgt.y, '衝刺!', '#fbbf24'); return; }
+  tgt.hp -= att.atk;
+  spawnFloat(tgt.x, tgt.y, '-'+att.atk, att.color);
+  // 路障人：只觸發一次
+  if (tgt.hasRage && !tgt.rageTriggered) {
+    tgt.rageTriggered = true;
+    tgt.rageTimer = 10;
+    spawnFloat(tgt.x, tgt.y, '憤怒!', '#ef4444');
+  }
+  // 速龍：每次被打都觸發
+  if (tgt.hasHaste) {
+    tgt.hasteTimer = 5;
+    spawnFloat(tgt.x, tgt.y, '加速!', '#7dd3fc');
+  }
+}
+function spawnFloat(x,y,text,color){ G.floatTexts.push({x,y,text,color,life:1.0}); }
+
+// ---------- HUD ----------
+function updateHUD() {
+  document.getElementById('turn-num').textContent = G.round;
+  const ct = document.getElementById('circle-tag');
+  if (ct) ct.textContent = '縮圈 ' + Math.max(0, Math.ceil(G.circle.timer)) + 's';
+  document.getElementById('coin-num').textContent = store.coins;
+  const vpBar = document.getElementById('vp-bar');
+  vpBar.innerHTML = '';
+  G.balls.forEach(b => {
+    const vp = b.victoryPoints||0;
+    const dots = Array.from({length: WIN_POINTS}, (_,i)=>`<div class="vpdot ${i<vp?'on':''}"></div>`).join('');
+    vpBar.innerHTML += `<div class="vp-chip"><span class="swatch" style="background:${b.color}"></span>${b.name}<div class="dots">${dots}</div></div>`;
+  });
+  const bar = document.getElementById('enemy-bar');
+  bar.innerHTML = '';
+  G.balls.filter(b=>!b.isPlayer).forEach(b=>{
+    const el = document.createElement('div');
+    el.className = 'enemy-chip' + (b.alive?'':' dead');
+    const pct = Math.max(0, b.hp/b.maxHp*100);
+    el.innerHTML = `
+      <span class="swatch" style="background:${b.color}"></span>
+      <span>${b.name}</span>
+      <div class="hpbar"><div class="hpfill" style="width:${pct}%;background:${b.color}"></div></div>
+      <span>${Math.max(0,Math.round(b.hp))}/${b.maxHp}</span>`;
+    bar.appendChild(el);
+  });
+  const p = G.balls.find(b=>b.isPlayer);
+  if (p) {
+    document.getElementById('pp-hp').style.width = Math.max(0,p.hp/p.maxHp*100)+'%';
+    document.getElementById('pp-hp-text').textContent = Math.max(0,Math.round(p.hp))+' / '+p.maxHp;
+    document.getElementById('pp-atk').textContent = p.atk;
+    document.getElementById('pp-spd').textContent = p.speed.toFixed(1);
+    document.getElementById('pp-dash').textContent = G.dashCd > 0 ? G.dashCd.toFixed(1) : '就緒';
+    const sk = document.getElementById('pp-skills');
+    sk.innerHTML = '';
+    p.ownedSkills.forEach(sid=>{
+      const c = CARD_POOL.find(x=>x.id===sid);
+      if (!c) return;
+      const el = document.createElement('div');
+      el.className = 'pp-skill';
+      el.style.borderColor = `var(--r-${c.rarity})`;
+      // 計算剩餘 CD
+      let cd = '';
+      if (sid==='r_bomb') cd = Math.max(0,p.bombTimer).toFixed(0);
+      else if (sid==='r_smoker') cd = Math.max(0,p.smokerTimer).toFixed(0);
+      else if (sid==='e_turret') cd = Math.max(0,(G.turrets.find(t=>t.ownerId===p.id)||{life:0}).life).toFixed(0);
+      else if (sid==='e_plague') cd = Math.max(0,p.plagueTimer).toFixed(0);
+      else if (sid==='e_rocket') cd = Math.max(0,p.rocketTimer).toFixed(0);
+      else if (sid==='l_judge') cd = Math.max(0,p.judgeTimer).toFixed(0);
+      else if (sid==='l_wither') cd = Math.max(0,p.witherTimer).toFixed(0);
+      else if (sid==='e_tank') cd = Math.max(0,p.tankTimer).toFixed(0);
+      else if (sid==='l_ghost') cd = p.ghostTimer>0 ? p.ghostTimer.toFixed(0)+'!' : '';
+      el.textContent = cd || (c.icon || '技');
+      el.title = c.name + (cd?` (CD ${cd})`:'');
+      sk.appendChild(el);
+    });
+  }
+}
+
+// ---------- 渲染 ----------
+function drawArena() {
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=G.mapTheme.grid; ctx.lineWidth=2;
+  ctx.strokeRect(BOUND,BOUND,W-BOUND*2,H-BOUND*2);
+  if (G.state === 'battle') {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0,0,W,H);
+    ctx.arc(W/2,H/2,G.circle.r,0,Math.PI*2,true);
+    ctx.fillStyle='rgba(239,68,68,0.15)'; ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle='rgba(239,68,68,0.6)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(W/2,H/2,G.circle.r,0,Math.PI*2); ctx.stroke();
+  }
+  // 煙霧粒子
+  G.smokeParticles.forEach(p => {
+    const a = p.life / p.maxLife * 0.4;
+    ctx.fillStyle = `rgba(150,150,150,${a})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 10*(1-p.life/p.maxLife)+5, 0, Math.PI*2); ctx.fill();
+  });
+  // 火箭爆炸圈
+  G.rocketFx.forEach(f => {
+    const lifeTotal = 0.8;
+    const t = 1 - f.life/lifeTotal;
+    const col = f.red ? '239,68,68' : '251,191,36';
+    ctx.strokeStyle = `rgba(${col},${1-t})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 100*t, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = `rgba(${col},${0.18*(1-t)})`;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 100*t, 0, Math.PI*2); ctx.fill();
+  });
+  // 單挑方框
+  if (G.duelBox && G.duelBox.active) {
+    ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 3;
+    ctx.setLineDash([8,6]);
+    ctx.strokeRect(G.duelBox.x, G.duelBox.y, G.duelBox.size, G.duelBox.size);
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(251,191,36,0.08)';
+    ctx.fillRect(G.duelBox.x, G.duelBox.y, G.duelBox.size, G.duelBox.size);
+  }
+  // 凋零投射物
+  G.projectiles.forEach(p => {
+    ctx.fillStyle = '#166534';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#4ade80';
+    ctx.beginPath(); ctx.arc(p.x-3, p.y-3, 4, 0, Math.PI*2); ctx.fill();
+  });
+  // 轟炸紅圈
+  G.bombSites.forEach(bs => {
+    const pulse = 0.5 + 0.5*Math.sin(performance.now()/100);
+    ctx.fillStyle = `rgba(239,68,68,${0.2+0.15*pulse})`;
+    ctx.beginPath(); ctx.arc(bs.x, bs.y, (bs.r||90), 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3;
+    ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.arc(bs.x, bs.y, (bs.r||90), 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ef4444';
+    ctx.font = 'bold 14px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(Math.max(0,bs.timer).toFixed(1), bs.x, bs.y-(bs.r||90)-12);
+  });
+  // 戰車黃色軌跡
+  G.balls.forEach(b => {
+    if (!b.tankTrail) return;
+    b.tankTrail.forEach(t => {
+      ctx.fillStyle = `rgba(251,191,36,${t.life})`;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 18, 0, Math.PI*2); ctx.fill();
+    });
+  });
+  // 繪製審判線
+  G.balls.filter(b=>b.alive).forEach(b => {
+    if (!b.judgeLines) return;
+    b.judgeLines.forEach(L => {
+      ctx.strokeStyle = L.dealt.size ? '#c084fc' : '#60a5fa';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(L.x - L.dx*120, L.y - L.dy*120);
+      ctx.lineTo(L.x, L.y);
+      ctx.stroke();
+    });
+  });
+
+  // 固定式砲台（顔色=主人顔色，顯示 130 範圍圈）
+  G.turrets.forEach(tu => {
+    // 範圍圈
+    ctx.fillStyle = tu.color;
+    ctx.globalAlpha = 0.12;
+    ctx.beginPath(); ctx.arc(tu.x, tu.y, 130, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = tu.color; ctx.lineWidth = 2;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.arc(tu.x, tu.y, 130, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    // 底座
+    ctx.fillStyle = tu.color;
+    ctx.beginPath(); ctx.arc(tu.x, tu.y, 14, 0, Math.PI*2); ctx.fill();
+    // 炮管（朝最近敵人方向旋轉）
+    let ang = performance.now()/500;
+    const owner = G.balls.find(b=>b.id===tu.ownerId && b.alive);
+    if (owner) {
+      let nearest = null, nd = 1e9;
+      alive_balls().forEach(o => { if (o.id!==tu.ownerId && o.alive){ const d=Math.hypot(o.x-tu.x,o.y-tu.y); if(d<nd){nd=d;nearest=o;} } });
+      if (nearest) ang = Math.atan2(nearest.y-tu.y, nearest.x-tu.x);
+    }
+    ctx.strokeStyle = tu.color; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(tu.x, tu.y);
+    ctx.lineTo(tu.x+Math.cos(ang)*22, tu.y+Math.sin(ang)*22);
+    ctx.stroke();
+    // 中心白點
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(tu.x, tu.y, 5, 0, Math.PI*2); ctx.fill();
+  });
+  ctx.fillStyle=G.mapTheme.dot;
+  for (let x=BOUND+30;x<W-BOUND;x+=40)
+    for (let y=BOUND+30;y<H-BOUND;y+=40) {
+      ctx.beginPath(); ctx.arc(x,y,1.2,0,Math.PI*2); ctx.fill();
+    }
+}
+function render() {
+  drawArena();
+  G.balls.forEach(b=>b.draw(ctx));
+  G.floatTexts.forEach(f=>{
+    ctx.fillStyle=f.color; ctx.globalAlpha=Math.min(1,f.life);
+    ctx.font='bold 14px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(f.text,f.x,f.y-(1-f.life)*30);
+    ctx.globalAlpha=1;
+  });
+}
+
+// ---------- 主循環 ----------
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min(0.033,(now-lastT)/1000);
+  lastT = now;
+  if (G.state==='draw' && !G.net.isGuest) {
+    G.drawTimer -= dt;
+    const el = document.getElementById('draw-timer');
+    if (el) el.textContent = Math.max(0,G.drawTimer).toFixed(1);
+    if (G.drawTimer <= 0 && document.getElementById('draw-cards').children.length > 0) {
+      onCardChosen(pick(G.currentCards));
+    }
+  }
+  if (G.state==='battle') {
+    stepPhysics(dt);
+    if (!G.net.isGuest) {
+      const alive = G.balls.filter(b=>b.alive);
+      let roundOver = false;
+      if (G.teamMode) {
+        const teamsLeft = new Set(alive.map(b=>b.team));
+        roundOver = teamsLeft.size <= 1;
+      } else {
+        roundOver = alive.length <= 1;
+      }
+      if (roundOver) endRound();
+    }
+  }
+  G.floatTexts = G.floatTexts.filter(f=>{ f.life -= dt*1.2; return f.life>0; });
+  render(); updateHUD();
+  requestAnimationFrame(loop);
+}
+
+// ---------- 子介面 ----------
+function openSub(title, html) {
+  document.getElementById('sub-title').textContent = title;
+  document.getElementById('sub-body').innerHTML = html;
+  document.getElementById('sub-overlay').classList.remove('hidden');
+}
+document.getElementById('btn-close-sub').onclick = () => document.getElementById('sub-overlay').classList.add('hidden');
+document.getElementById('btn-shop').onclick = () => openSub('皮膚商店', `<p>皮膚系統開發中。當前金幣：<b style="color:var(--gold)">${store.coins}</b></p>`);
+document.getElementById('btn-rank').onclick = () => openSub('排行榜', `<p>本地戰績：${store.games} 場，${store.wins} 勝。</p>`);
+document.getElementById('btn-dex').onclick = () => {
+  const order = { common:0, rare:1, epic:2, legendary:3, divine:4 };
+  const sorted = [...CARD_POOL].sort((a,b)=>order[a.rarity]-order[b.rarity]);
+  const items = sorted.map(c=>{
+    const seen = store.seenSkills.includes(c.id);
+    const artInner = c.img ? `<img src="${c.img}" alt="">` : (seen ? c.icon : '');
+    const dxCls = c.rarity==='divine' && seen ? 'dex-divine' : '';
+    return `<div class="dex-item ${seen?'':'locked'} ${dxCls}" style="border-color:var(--r-${c.rarity})">
+      <div class="art">${artInner}</div>
+      <div>${seen?c.name:'???'}</div>
+      <div style="color:var(--dim);font-size:10px">${RARITY[c.rarity].name}</div>
+    </div>`;
+  }).join('');
+  openSub('技能圖鑑', `<div class="dex-grid">${items}</div><p style="margin-top:10px">灰色=尚未抽過的技能</p>`);
+};
+
+// ---------- 玩家名 ----------
+function renderPlayerName(){ document.getElementById('player-name-title').textContent = store.playerName; }
+document.getElementById('player-name-title').onclick = () => {
+  const n = prompt('輸入你的名字：', store.playerName);
+  if (n && n.trim()) { store.playerName = n.trim().slice(0,10); persist(); renderPlayerName(); }
+};
+renderPlayerName();
+
+// ---------- 主選單 ----------
+document.getElementById('btn-solo').onclick = () => startMatch(false);
+document.getElementById('btn-duo').onclick = () => startMatch(true);
+function startMatch(teamMode) {
+  document.getElementById('menu-overlay').classList.add('hidden');
+  document.getElementById('app').classList.remove('hud-hidden');
+  G.lastWinnerId = null;
+  initGame(teamMode);
+  G.balls.forEach(b => b.recalcStats());
+  G.balls.forEach(b => b.launch(G.balls.filter(o=>o!==b)));
+  startDrawPhase();
+};
+document.getElementById('btn-create').onclick = createHostRoom;
+document.getElementById('btn-join').onclick = joinGuestRoom;
+// ---------- 聯機 (PeerJS P2P) ----------
+function genRoomCode() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let r = '';
+  for (let i=0;i<4;i++) r += c[Math.floor(Math.random()*c.length)];
+  return r;
+}
+function createHostRoom() {
+  G.net.isHost = true;
+  const ws = new WebSocket(G.WS_URL);
+  G.net.ws = ws;
+  ws.onopen = () => ws.send(JSON.stringify({ t:'createRoom' }));
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.t === 'roomCreated') {
+      G.net.roomCode = data.code;
+      openSub('創建房間', `<p>房號：<b style="font-size:24px;color:#fbbf24;letter-spacing:4px">${data.code}</b></p>
+        <p>把房號告訴朋友，等他加入…</p>
+        <div id="net-player-list" style="margin:10px 0">等待玩家加入…</div>
+        <button class="btn primary" id="btn-net-start">開始遊戲</button>`);
+      document.getElementById('btn-net-start').onclick = () => startOnlineMatch(true);
+    }
+    if (data.t === 'guestJoined') {
+      G.net.remoteBalls[data.wsId] = { name: data.name };
+      renderNetLobby();
+    }
+    if (data.t === 'guestLeft') {
+      delete G.net.remoteBalls[data.wsId];
+      renderNetLobby();
+    }
+    // 客人的輸入/選擇直接在這裡處理
+    if (data.t === 'input' && data.fromGuest) G.net.remoteInputs[data.fromGuest] = data.keys;
+    if (data.t === 'dash' && data.fromGuest) {
+      const b = G.balls.find(x => x.remoteId === data.fromGuest);
+      if (b && b.alive) {
+        let ang = Math.atan2(b.vy, b.vx);
+        if (Math.hypot(b.vx,b.vy) < 0.1) ang = Math.random()*Math.PI*2;
+        b.vx = Math.cos(ang)*b.speed*3; b.vy = Math.sin(ang)*b.speed*3;
+      }
+    }
+    if (data.t === 'picked' && data.fromGuest && G.pendingPicks && G.pendingPicks[data.fromGuest]) {
+      const p = G.pendingPicks[data.fromGuest];
+      const card = CARD_POOL.find(c => c.id === data.cardId) || p.cards[0];
+      card.apply(p.ball, G.balls);
+      p.ball.ownedSkills.push(card.id);
+      p.ball.recalcStats();
+      p.picked = true;
+    }
+  };
+  ws.onerror = () => openSub('錯誤', '<p>連不上伺服器，確認 WS_URL 設對了嗎？</p>');
+}
+function renderNetLobby() {
+  const el = document.getElementById('net-player-list');
+  if (!el) return;
+  let html = '<p>已加入：你（房主）</p>';
+  for (const pid in G.net.remoteBalls) {
+    html += '<p style="color:#7dd3fc">'+G.net.remoteBalls[pid].name+'</p>';
+  }
+  el.innerHTML = html;
+}
+function joinGuestRoom() {
+  const code = prompt('輸入房號（4 位英文數字）：');
+  if (!code) return;
+  G.net.isGuest = true;
+  const ws = new WebSocket(G.WS_URL);
+  G.net.ws = ws;
+  ws.onopen = () => ws.send(JSON.stringify({ t:'joinRoom', code: code.toUpperCase(), name: store.playerName || '玩家' }));
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.t === 'joinError') { openSub('錯誤', '<p>'+data.reason+'</p>'); return; }
+    if (data.t === 'joined') openSub('等待房主', '<p>已連接 '+data.code+'，等房主開始…</p>');
+    if (data.t === 'hostLeft') openSub('斷線', '<p>房主已離開。</p>');
+    if (data.t === 'state') applyRemoteState(data);
+    if (data.t === 'drawCards') {
+      G.state = 'draw';
+      G.drawTimer = DRAW_TIME;
+      document.querySelector('#draw-overlay .draw-title').textContent = '抽一張卡強化自己';
+      showDrawCards(data.cards.map(c => ({
+        id: c.id, name: c.name, desc: c.desc, rarity: c.rarity,
+        img: c.img, icon: c.icon, apply: ()=>{}
+      })));
+    }
+    if (data.t === 'start') {
+      document.getElementById('sub-overlay').classList.add('hidden');
+      document.getElementById('menu-overlay').classList.add('hidden');
+      document.getElementById('app').classList.remove('hud-hidden');
+      if (!G.balls || G.balls.length === 0) {
+        initGame(false);
+        G.balls.forEach(b => b.recalcStats());
+      }
+      G.myIndex = data.myIndex || 0;
+      G.balls.forEach((b,i) => b.isPlayer = (i === G.myIndex));
+    }
+  };
+  ws.onerror = () => openSub('錯誤', '<p>連不上伺服器。</p>');
+}
+function startOnlineMatch(teamMode) {
+  // 房主：建立球場，把遠端玩家加成 remote ball
+  document.getElementById('sub-overlay').classList.add('hidden');
+  document.getElementById('menu-overlay').classList.add('hidden');
+  document.getElementById('app').classList.remove('hud-hidden');
+  G.lastWinnerId = null;
+  initGame(false);
+  // 把遙控玩家換成真實玩家球（不再是 AI）
+  const pids = Object.keys(G.net.remoteBalls);
+  pids.forEach((pid, i) => {
+    const b = G.balls[i+1];
+    if (b) {
+      b.isPlayer = false;
+      b.isRemote = true;
+      b.remoteId = pid;
+      b.name = G.net.remoteBalls[pid].name;
+    }
+  });
+  G.balls.forEach(b => b.recalcStats());
+  G.balls.forEach(b => b.launch(G.balls.filter(o=>o!==b)));
+  // 告訴伺服器開始，伺服器會轉給客人
+  if (G.net.ws && G.net.ws.readyState === 1) {
+    const indexMap = {};
+    Object.keys(G.net.remoteBalls).forEach(pid => {
+      const idx = G.balls.findIndex(b => b.remoteId === pid);
+      indexMap[G.net.remoteBalls[pid].name] = idx;
+    });
+    G.net.ws.send(JSON.stringify({ t:'hostStart', indexMap }));
+  }
+  startDrawPhase();
+}
+function hostBroadcast() {
+  if (!G.net.isHost || !G.net.ws || G.net.ws.readyState !== 1) return;
+  const payload = {
+    t: 'state',
+    balls: G.balls.map(b => ({
+      id: b.id, name: b.name, color: b.color,
+      x: b.x, y: b.y, hp: b.hp, maxHp: b.maxHp,
+      alive: b.alive, isPlayer: b.isPlayer,
+      atk: b.atk, spd: b.speed,
+      skills: b.ownedSkills
+    })),
+    circleR: G.circle.r, circleTimer: G.circle.timer,
+    state: G.state, round: G.round
+  };
+  G.net.ws.send(JSON.stringify(payload));
+}
+function applyRemoteState(data) {
+  // 客人：用房主狀態覆蓋本地球
+  if (!G.balls || G.balls.length === 0) {
+    // 初始化一個空場
+    initGame(false);
+  }
+  data.balls.forEach((bd, i) => {
+    if (G.balls[i]) {
+      // 客人自己的球：只同步血量/生死，位置交給本地物理預測
+      if (i !== G.myIndex) {
+        G.balls[i].x = bd.x; G.balls[i].y = bd.y;
+      }
+      G.balls[i].hp = bd.hp; G.balls[i].maxHp = bd.maxHp;
+      G.balls[i].alive = bd.alive;
+      G.balls[i].name = bd.name;
+      G.balls[i].color = bd.color;
+    }
+  });
+  if (G.circle) { G.circle.r = data.circleR; G.circle.timer = data.circleTimer; }
+  G.state = data.state;
+  G.round = data.round;
+}
+// 客人：發送輸入
+setInterval(() => {
+  if (G.net.isGuest && G.net.ws && G.net.ws.readyState === 1) {
+    G.net.ws.send(JSON.stringify({ t:'input', keys: {...G.keys} }));
+  }
+  if (G.net.isHost) hostBroadcast();
+}, 50);
+
+document.getElementById('btn-restart').onclick = () => {
+  document.getElementById('end-overlay').classList.add('hidden');
+  document.getElementById('menu-overlay').classList.remove('hidden');
+  document.getElementById('app').classList.add('hud-hidden');
+};
+
+// ---------- 鍵盤控制 ----------
+window.addEventListener('keydown', e => {
+  G.keys[e.key.toLowerCase()] = true;
+  if (e.key === 'Shift' && G.state === 'battle') {
+    const p = G.balls.find(b => b.isPlayer && b.alive);
+    if (p && G.dashCd <= 0 && G.dashTime <= 0) {
+      // 衝刺方向 = 當前移動方向（或最後方向）
+      let ang = Math.atan2(p.vy, p.vx);
+      if (Math.hypot(p.vx,p.vy) < 0.1) ang = 0;
+      p.vx = Math.cos(ang) * p.speed * 3;
+      p.vy = Math.sin(ang) * p.speed * 3;
+      G.dashTime = 0.25;
+      G.dashCd = 2.0;
+      if (G.net.isGuest && G.net.ws && G.net.ws.readyState === 1) {
+        G.net.ws.send(JSON.stringify({ t:'dash' }));
+      }
+      spawnFloat(p.x, p.y-30, '衝刺!', '#fbbf24');
+    }
+  }
+});
+window.addEventListener('keyup', e => { G.keys[e.key.toLowerCase()] = false; });
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
