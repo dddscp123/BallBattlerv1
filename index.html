@@ -765,7 +765,7 @@ const G = {
   projectiles: [],
   rocketFx: [],
   turrets: [],
-  bombSites: [],
+  bombSites: [], particles: [],
   paralysisTimer: 0,
   WS_URL: 'wss://ballbattlerv1.onrender.com',
   net: { isHost:false, isGuest:false, peer:null, conn:null, conns:[], remoteInputs:{}, remoteBalls:{}, roomCode:'', lastBroadcast:0 },
@@ -1385,6 +1385,7 @@ function stepPhysics(dt) {
       const cd=G.hitCooldowns.get(key)||0;
       if (cd<=0) {
         dealDamage(a,c); dealDamage(c,a);
+        spawnParticles((a.x+c.x)/2,(a.y+c.y)/2,'#fbbf24',10,{sp:4,r:3});
         G.hitCooldowns.set(key, 0.6);
       }
     }
@@ -1438,6 +1439,36 @@ function dealDamage(att, tgt) {
   }
 }
 function spawnFloat(x,y,text,color){ G.floatTexts.push({x,y,text,color,life:1.0}); }
+
+// ===== 特效粒子（房主產生並廣播，客人收到後本地渲染）=====
+function spawnParticles(x,y,color,count,opt){
+  opt = opt || {};
+  for(let i=0;i<count;i++){
+    const ang=Math.random()*Math.PI*2, sp=Math.random()*(opt.sp||3)+0.5;
+    G.particles.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
+      color, r:Math.random()*(opt.r||3)+1.5, life:1,
+      decay:Math.random()*0.03+0.02});
+  }
+  // 房主廣播給客人
+  if(G.net.isHost && G.net.ws && G.net.ws.readyState===1){
+    G.net.ws.send(JSON.stringify({t:'fx', fx:{x,y,color,count,opt}}));
+  }
+}
+function updateParticles(dt){
+  G.particles = G.particles.filter(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.life-=p.decay;
+    p.vx*=0.96; p.vy*=0.96;
+    return p.life>0;
+  });
+}
+function drawParticles(){
+  G.particles.forEach(p=>{
+    ctx.globalAlpha=p.life; ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+  });
+  ctx.globalAlpha=1;
+}
+
 
 // ---------- HUD ----------
 function updateHUD() {
@@ -1618,6 +1649,7 @@ function drawArena() {
 }
 function render() {
   drawArena();
+  drawParticles();
   G.balls.forEach(b=>b.draw(ctx));
   G.floatTexts.forEach(f=>{
     ctx.fillStyle=f.color; ctx.globalAlpha=Math.min(1,f.life);
@@ -1672,6 +1704,7 @@ function loop(now) {
     }
   }
   G.floatTexts = G.floatTexts.filter(f=>{ f.life -= dt*1.2; return f.life>0; });
+  updateParticles(dt);
   render(); updateHUD();
   // 邀請鏈接：?room=XXXX 自動加入
 (function(){
@@ -1692,6 +1725,14 @@ function loop(now) {
         if (data.t === 'mapChosen') {
       G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
       document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+    }
+    if (data.t === 'fx' && data.fx) {
+      const f = data.fx;
+      for(let i=0;i<f.count;i++){
+        const ang=Math.random()*Math.PI*2, sp=Math.random()*(f.opt.sp||3)+0.5;
+        G.particles.push({x:f.x,y:f.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
+          color:f.color,r:Math.random()*(f.opt.r||3)+1.5,life:1,decay:Math.random()*0.03+0.02});
+      }
     }
     if (data.t === 'state') applyRemoteState(data);
         if (data.t === 'drawCards') {
@@ -1890,6 +1931,14 @@ function joinGuestRoom() {
       G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
       document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
     }
+    if (data.t === 'fx' && data.fx) {
+      const f = data.fx;
+      for(let i=0;i<f.count;i++){
+        const ang=Math.random()*Math.PI*2, sp=Math.random()*(f.opt.sp||3)+0.5;
+        G.particles.push({x:f.x,y:f.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
+          color:f.color,r:Math.random()*(f.opt.r||3)+1.5,life:1,decay:Math.random()*0.03+0.02});
+      }
+    }
     if (data.t === 'state') applyRemoteState(data);
     if (data.t === 'drawCards') {
       // 只處理給自己的牌
@@ -2050,8 +2099,8 @@ function applyRemoteState(data) {
     if (i === G.myIndex) {
       // 自己的球：偏差大才硬拉，小偏差 lerp
       const d = Math.hypot(bd.x-lb.x, bd.y-lb.y);
-      if (d > 100) { lb.x = bd.x; lb.y = bd.y; }
-      else { lb.x += (bd.x-lb.x)*0.15; lb.y += (bd.y-lb.y)*0.15; }
+      if (d > 80) { lb.x = bd.x; lb.y = bd.y; }
+      else { lb.x += (bd.x-lb.x)*0.08; lb.y += (bd.y-lb.y)*0.08; }
     } else {
       // 其他球：存目標位置，loop 裡 lerp
       lb._tx = bd.x; lb._ty = bd.y;
@@ -2124,6 +2173,14 @@ window.addEventListener('blur', () => { G.keys = {}; });
         if (data.t === 'mapChosen') {
       G.mapTheme = MAP_THEMES[data.mapIdx] || MAP_THEMES[0];
       document.getElementById('arena-wrap').style.background = G.mapTheme.bg;
+    }
+    if (data.t === 'fx' && data.fx) {
+      const f = data.fx;
+      for(let i=0;i<f.count;i++){
+        const ang=Math.random()*Math.PI*2, sp=Math.random()*(f.opt.sp||3)+0.5;
+        G.particles.push({x:f.x,y:f.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,
+          color:f.color,r:Math.random()*(f.opt.r||3)+1.5,life:1,decay:Math.random()*0.03+0.02});
+      }
     }
     if (data.t === 'state') applyRemoteState(data);
         if (data.t === 'drawCards') {
