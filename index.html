@@ -1674,8 +1674,8 @@ function applyRemoteState(data) {
   }
   data.balls.forEach((bd, i) => {
     if (G.balls[i]) {
-      // 客人自己的球：只同步血量/生死，位置交給本地物理預測
-      if (i !== G.myIndex) {
+      // 第一次同步或非自己：用房主位置；之後自己的球本地預測
+      if (!G.firstStateApplied || i !== G.myIndex) {
         G.balls[i].x = bd.x; G.balls[i].y = bd.y;
       }
       G.balls[i].hp = bd.hp; G.balls[i].maxHp = bd.maxHp;
@@ -1684,6 +1684,7 @@ function applyRemoteState(data) {
       G.balls[i].color = bd.color;
     }
   });
+  G.firstStateApplied = true;
   if (G.circle) { G.circle.r = data.circleR; G.circle.timer = data.circleTimer; }
   G.state = data.state;
   G.round = data.round;
